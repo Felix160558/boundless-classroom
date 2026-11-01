@@ -11,7 +11,7 @@ A quiet classroom floating in space. A public, static learning demo built with H
 - **Enter the VR** opens a navigable 3D classroom concept, with a whiteboard, one desk, one chair, a cat teacher and teacher/learner floor markers.
 - On a compatible HTTPS/WebXR device, an experimental single-user headset entry is offered. Actual headset compatibility has not been verified.
 
-The golden cat is a procedural placeholder inspired by the founder's cat, not a final likeness. Stars, a stylized distant galaxy and a solar-system motif are generated in code; they are artistic scenery, not an astronomical model.
+The golden cat is a procedural cartoon inspired by the founder's cat: a broad rounded face, smaller soft-edged ears, pale chin and chest, and compact paws. It remains a stylized prototype rather than a final likeness. The background is a volumetric particle nebula with layered depth, soft twinkling and slow harmonious drift. All solid planets and solar-system orbit motifs have been removed. Everything is generated locally in code, not copied from another product's assets.
 
 ## Honest demo boundaries
 
@@ -43,3 +43,5 @@ This folder is ready to publish from the repository main branch root. In Setting
 - three.module.min.js / THREE-LICENSE.txt — pinned Three.js runtime and MIT notice
 
 Bookings are stored only under localStorage key boundless_demo_booking. Chat is in page memory and is cleared on reload. Browser text-to-speech behavior depends on the browser and operating system. Neither site files nor this public repository contain chat archives, original cat photographs or service credentials.
+
+THREE-LICENSE.txt covers the bundled third-party Three.js runtime. A separate license for the original project code has not been selected.

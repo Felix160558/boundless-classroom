@@ -112,80 +112,173 @@ export function createSpace(container, onState=()=>{}) {
   floorLabel('TEACHER',-2.6,-.8);floorLabel('LEARNER',.8,2.8);
 
   function createCat(){
+    // A compact golden cat: broad cheeks, small rounded ears and grounded paws.
     const cat=new THREE.Group();cat.position.set(-2.45,.1,-1.2);room.add(cat);
-    const fur=new THREE.MeshStandardMaterial({color:0xb7854f,roughness:.93});
-    const cream=new THREE.MeshStandardMaterial({color:0xf0d7a4,roughness:.94});
-    const muzzle=new THREE.MeshStandardMaterial({color:0xf0dfc3,roughness:.95});
-    const black=new THREE.MeshStandardMaterial({color:0x131b17,roughness:.18});
-    const eyeGold=new THREE.MeshStandardMaterial({color:0xadb684,roughness:.3});
-    const pink=new THREE.MeshStandardMaterial({color:0xc79b91,roughness:.85});
-    sphere(.5,fur,0,.57,0,cat,[.86,1.1,.73]);sphere(.3,cream,0,.54,.28,cat,[1,1.23,.44]);
-    sphere(.53,fur,0,1.25,.01,cat,[1.1,.98,.9]);sphere(.43,cream,0,1.23,.22,cat,[1.2,.98,.64]);
-    for(const s of [-1,1]){
-      const ear=mesh(new THREE.ConeGeometry(.23,.4,3),fur,cat,s*.37,1.66,-.02);ear.rotation.z=-s*.23;
-      const inner=mesh(new THREE.ConeGeometry(.135,.25,3),pink,cat,s*.37,1.67,.09);inner.rotation.z=-s*.23;
-      sphere(.115,eyeGold,s*.23,1.3,.487,cat,[1,.98,.35]);
-      sphere(.075,black,s*.23,1.3,.52,cat,[.86,1.08,.4]);
-      sphere(.022,materials.white,s*.21,1.33,.55,cat);
-      sphere(.145,muzzle,s*.14,1.09,.43,cat,[1.04,.9,.55]);
-      sphere(.16,cream,s*.27,.17,.2,cat,[1,.75,1.25]);
-      for(let j=0;j<3;j++){
-        const pts=[[s*.21,1.08+j*.035,.49],[s*.57,1.05+j*.075,.48]];
-        const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts.map(p=>new THREE.Vector3(...p))),new THREE.LineBasicMaterial({color:0xe2d8c2,transparent:true,opacity:.65}));cat.add(line);
+    const fur=new THREE.MeshStandardMaterial({color:0xd5a15f,roughness:.94});
+    const lightFur=new THREE.MeshStandardMaterial({color:0xe8be80,roughness:.96});
+    const cream=new THREE.MeshStandardMaterial({color:0xf2dfb8,roughness:.98});
+    const pink=new THREE.MeshStandardMaterial({color:0xd8a499,roughness:.87});
+    const noseMat=new THREE.MeshStandardMaterial({color:0xb8877c,roughness:.65});
+    const eyeRim=new THREE.MeshStandardMaterial({color:0x69533b,roughness:.7});
+    const iris=new THREE.MeshPhysicalMaterial({color:0x9ea77a,roughness:.3,clearcoat:.4});
+    const pupil=new THREE.MeshPhysicalMaterial({color:0x101713,roughness:.13,clearcoat:1});
+    const shine=new THREE.MeshBasicMaterial({color:0xfff8e8});
+    // Vertex color blends the pale chin into the golden head without a separate face plate.
+    const headGeo=new THREE.SphereGeometry(.61,48,36),headColors=[];
+    const gold=new THREE.Color(0xd5a15f),pale=new THREE.Color(0xf1ddb7);
+    const hp=headGeo.attributes.position;
+    for(let i=0;i<hp.count;i++){
+      const y=hp.getY(i),z=hp.getZ(i);
+      const chin=THREE.MathUtils.smoothstep(-y,-.02,.36)*THREE.MathUtils.smoothstep(z,-.15,.32);
+      const col=gold.clone().lerp(pale,chin*.88);headColors.push(col.r,col.g,col.b);
+    }
+    headGeo.setAttribute('color',new THREE.Float32BufferAttribute(headColors,3));
+    const headMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.93});
+    sphere(.57,fur,0,.58,-.13,cat,[1.04,1.1,.94]);
+    sphere(.40,lightFur,0,.72,.21,cat,[1.05,1.05,.67]);
+    sphere(.32,cream,0,.67,.39,cat,[.92,1.05,.28]);
+    for(const side of [-1,1]){
+      sphere(.32,fur,side*.39,.31,-.16,cat,[1.0,.88,1.23]);
+      sphere(.19,lightFur,side*.26,.36,.37,cat,[.91,1.3,.94]);
+      sphere(.22,lightFur,side*.26,.15,.53,cat,[1.02,.64,1.25]);
+      // Short toe creases, rather than separate bead-like toes.
+      for(const offset of [-.065,.065]){
+        const toe= new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(side*.26+offset,.175,.75),new THREE.Vector3(side*.26+offset,.205,.68)
+        ]),new THREE.LineBasicMaterial({color:0xb58c59,transparent:true,opacity:.35}));cat.add(toe);
       }
     }
-    sphere(.05,pink,0,1.105,.528,cat,[1.2,.7,.6]);
-    tube([[.32,.3,-.15],[.65,.4,-.36],[.77,.68,-.26],[.7,.85,-.13]],.10,fur,cat);
-    const collar=mesh(new THREE.TorusGeometry(.34,.035,8,40),new THREE.MeshStandardMaterial({color:0x506b63,roughness:.6}),cat,0,.89,.06);
-    collar.rotation.x=Math.PI/2;
-    sphere(.06,new THREE.MeshStandardMaterial({color:0xc5a566,metalness:.7,roughness:.35}),0,.86,.37,cat);
-    cat.rotation.y=.14;return cat;
+    const head=new THREE.Group();head.position.set(0,1.18,.06);head.rotation.z=.035;cat.add(head);
+    const headMesh=mesh(headGeo,headMat,head);headMesh.scale.set(1.12,.94,.92);
+    // Small soft triangular ears with rounded edges and a recessed inner ear.
+    function earShape(w,h){
+      const shape=new THREE.Shape();shape.moveTo(-w/2,0);
+      shape.bezierCurveTo(-w*.52,h*.18,-w*.34,h*.82,-w*.12,h*.98);
+      shape.bezierCurveTo(0,h*1.07,w*.12,h*.98,w*.23,h*.76);
+      shape.bezierCurveTo(w*.43,h*.42,w*.56,h*.10,w/2,0);
+      shape.quadraticCurveTo(0,-h*.12,-w/2,0);return shape;
+    }
+    for(const side of [-1,1]){
+      const ear=new THREE.Group();ear.position.set(side*.43,.43,-.06);ear.rotation.z=-side*.20;head.add(ear);
+      const outer=new THREE.ExtrudeGeometry(earShape(.33,.30),{depth:.075,bevelEnabled:true,bevelSegments:4,steps:1,bevelSize:.035,bevelThickness:.035,curveSegments:12});
+      mesh(outer,fur,ear,0,0,0);
+      const inner=new THREE.ShapeGeometry(earShape(.20,.20),20);
+      mesh(inner,pink,ear,0,.032,.115);
+      const eye=new THREE.Group();eye.position.set(side*.245,.055,.492);eye.rotation.y=side*.31;head.add(eye);
+      sphere(.143,eyeRim,0,0,0,eye,[1,.90,.22]);
+      sphere(.128,iris,0,.001,.022,eye,[1,.88,.20]);
+      sphere(.096,pupil,0,.002,.043,eye,[.86,1,.24]);
+      sphere(.027,shine,-.025,.038,.068,eye,[1,1,.28]);
+      sphere(.010,shine,.032,-.034,.066,eye,[1,1,.25]);
+      sphere(.215,lightFur,side*.27,-.17,.394,head,[1.16,.92,.52]);
+      sphere(.132,cream,side*.106,-.225,.501,head,[1.1,.72,.45]);
+      for(let j=0;j<3;j++){
+        const y=-.21+j*.045;
+        const pts=[[side*.22,y,.49],[side*.43,y+.015*(j-1),.51],[side*.66,y+.05*(j-1),.48]];
+        const whisker=new THREE.Line(new THREE.BufferGeometry().setFromPoints(new THREE.CatmullRomCurve3(pts.map(v=>new THREE.Vector3(...v))).getPoints(10)),new THREE.LineBasicMaterial({color:0xf1e2c6,transparent:true,opacity:.65}));head.add(whisker);
+      }
+    }
+    sphere(.047,noseMat,0,-.19,.566,head,[1.08,.63,.48]);
+    const mouthMat=new THREE.LineBasicMaterial({color:0x97765e,transparent:true,opacity:.7});
+    for(const side of [-1,1]){
+      const curve=new THREE.QuadraticBezierCurve3(new THREE.Vector3(0,-.221,.555),new THREE.Vector3(side*.03,-.268,.55),new THREE.Vector3(side*.078,-.251,.54));
+      head.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(12)),mouthMat));
+    }
+    tube([[.39,.24,-.30],[.68,.19,-.34],[.79,.17,-.05],[.67,.16,.20],[.48,.16,.22]],.12,fur,cat);
+    cat.rotation.y=.28;return cat;
   }
   const cat=createCat();
 
-  // All celestial imagery is generated locally: no textures, tracking, or external CDNs.
-  const random=seeded();
-  const starPositions=[],starColors=[];
-  for(let i=0;i<4300;i++){
-    const theta=random()*TAU,u=random()*2-1,r=115+random()*110;
-    starPositions.push(r*Math.sqrt(1-u*u)*Math.cos(theta),r*u,r*Math.sqrt(1-u*u)*Math.sin(theta));
-    const a=.21+random()*.62;starColors.push(a*.91,a*.94,a);
+  // A volumetric particle ribbon: every point has real depth, never a flat galaxy card.
+  // No solid planets or solar-system orbit decorations.
+  const random=seeded(149),skyTime={value:0},pointScale={value:1};
+  function gaussian(){return Math.sqrt(-2*Math.log(Math.max(.00001,random())))*Math.cos(TAU*random());}
+  function particleField(data,flow=0,soft=false){
+    const geometry=new THREE.BufferGeometry();
+    for(const [name,values,size] of [['position',data.position,3],['aColor',data.color,3],['aSize',data.size,1],['aAlpha',data.alpha,1],['aPhase',data.phase,1],['aSpeed',data.speed,1]])geometry.setAttribute(name,new THREE.Float32BufferAttribute(values,size));
+    const material=new THREE.ShaderMaterial({
+      uniforms:{uTime:skyTime,uPointScale:pointScale,uFlow:{value:flow},uSoft:{value:soft?1:0}},
+      transparent:true,depthWrite:false,depthTest:true,blending:THREE.AdditiveBlending,toneMapped:false,
+      vertexShader:`
+        uniform float uTime;
+        uniform float uPointScale;
+        uniform float uFlow;
+        uniform float uSoft;
+        attribute vec3 aColor;
+        attribute float aSize;
+        attribute float aAlpha;
+        attribute float aPhase;
+        attribute float aSpeed;
+        varying vec3 vColor;
+        varying float vAlpha;
+        void main(){
+          vec3 p=position;
+          if(uFlow>.5){
+            p.y=mod(p.y+uTime*(.42+aSpeed*.55)+180.,360.)-180.;
+            p.x+=sin(uTime*.055+aPhase)*.7;
+          }else{
+            p.y+=sin(uTime*.075+p.x*.021)*2.3;
+            p.z+=cos(uTime*.045+p.x*.015)*2.6;
+          }
+          vec4 viewPosition=modelViewMatrix*vec4(p,1.);
+          gl_Position=projectionMatrix*viewPosition;
+          gl_PointSize=clamp(aSize*uPointScale/max(1.,-viewPosition.z),1.0,uSoft>.5?180.:22.);
+          vColor=aColor;
+          vAlpha=aAlpha*(.73+.27*sin(uTime*(.48+aSpeed*.65)+aPhase));
+        }`,
+      fragmentShader:`
+        uniform float uSoft;
+        varying vec3 vColor;
+        varying float vAlpha;
+        void main(){
+          float radius=length(gl_PointCoord-.5)*2.;
+          if(radius>1.)discard;
+          float core=exp(-radius*radius*(uSoft>.5?2.8:5.5));
+          gl_FragColor=vec4(vColor,core*vAlpha);
+          #include <colorspace_fragment>
+        }`
+    });
+    const points=new THREE.Points(geometry,material);points.frustumCulled=false;return points;
   }
-  const starGeo=new THREE.BufferGeometry();
-  starGeo.setAttribute('position',new THREE.Float32BufferAttribute(starPositions,3));starGeo.setAttribute('color',new THREE.Float32BufferAttribute(starColors,3));
-  const stars=new THREE.Points(starGeo,new THREE.PointsMaterial({size:.31,vertexColors:true,transparent:true,opacity:.8,sizeAttenuation:true,depthWrite:false}));scene.add(stars);
-  function glowTexture(){
-    const c=document.createElement('canvas');c.width=c.height=128;
-    const x=c.getContext('2d'),g=x.createRadialGradient(64,64,0,64,64,64);
-    g.addColorStop(0,'rgba(255,244,216,.92)');g.addColorStop(.08,'rgba(245,232,203,.75)');
-    g.addColorStop(.2,'rgba(197,209,233,.13)');g.addColorStop(1,'rgba(150,177,216,0)');x.fillStyle=g;x.fillRect(0,0,128,128);
-    return new THREE.CanvasTexture(c);
+  function particleData(){return {position:[],color:[],size:[],alpha:[],phase:[],speed:[]};}
+  function pushParticle(data,x,y,z,size,alpha,tint){
+    data.position.push(x,y,z);data.color.push(tint*.94,tint*.97,tint);
+    data.size.push(size);data.alpha.push(alpha);data.phase.push(random()*TAU);data.speed.push(random());
   }
-  const glow=glowTexture();
-  for(const p of [[-45,35,-95],[70,24,-85],[-100,-7,-75],[38,-18,-95],[25,58,-120]]){
-    const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:glow,transparent:true,opacity:.7,depthWrite:false}));
-    sprite.position.set(...p);sprite.scale.set(1.8,1.8,1.8);scene.add(sprite);
+  const distant=particleData();
+  for(let i=0;i<3500;i++){
+    const a=random()*TAU,u=random()*2-1,r=90+random()*160;
+    pushParticle(distant,r*Math.sqrt(1-u*u)*Math.cos(a),u*180,r*Math.sqrt(1-u*u)*Math.sin(a),.25+random()*.55,.45+random()*.55,.57+random()*.4);
   }
-  const galaxyCanvas=document.createElement('canvas');galaxyCanvas.width=2048;galaxyCanvas.height=768;
-  const gc=galaxyCanvas.getContext('2d');
-  const cloud=gc.createRadialGradient(1024,384,20,1024,384,900);
-  cloud.addColorStop(0,'rgba(183,181,173,.22)');cloud.addColorStop(.3,'rgba(107,121,153,.10)');cloud.addColorStop(1,'rgba(30,46,83,0)');
-  gc.save();gc.translate(1024,384);gc.scale(1,.24);gc.translate(-1024,-384);gc.fillStyle=cloud;gc.fillRect(0,-1000,2048,2800);gc.restore();
-  for(let i=0;i<9000;i++){
-    const x=random()*2048,spread=14+Math.sin(x/2048*Math.PI)*65;
-    const y=384+(random()+random()+random()-1.5)*spread;
-    const alpha=(.018+random()*.18)*Math.sin(x/2048*Math.PI);
-    gc.fillStyle='rgba(192,199,218,'+alpha.toFixed(3)+')';gc.beginPath();gc.arc(x,y,random()<.015?1.3:random()*.7+.12,0,TAU);gc.fill();
+  scene.add(particleField(distant,1));
+  const nebula=new THREE.Group();nebula.position.set(-58,-30,-95);nebula.rotation.set(0,.59,-.42);scene.add(nebula);
+  const dust=particleData(),haze=particleData();
+  const compact=container.clientWidth<650;
+  const count=compact?36000:65000;
+  for(let i=0;i<count;i++){
+    const u=random()*2-1,x=u*180,branch=random()<.65?0:1;
+    const spine=Math.sin(u*3.1+.4)*14+Math.sin(u*8.2)*3.5;
+    const separation=branch?17+Math.sin(u*4.5)*8:-8;
+    const thickness=3+7*(.5+.5*Math.sin(u*4.4+1.6));
+    const y=spine+separation+gaussian()*thickness;
+    const z=Math.sin(u*3.4)*18+gaussian()*(branch?10:17);
+    const edge=Math.pow(Math.max(0,1-u*u),.45);
+    const bright=random();
+    pushParticle(dust,x,y,z,.28+Math.pow(bright,3)*.95,(.20+random()*.35)*edge,.43+random()*.40);
   }
-  const galaxy=new THREE.Mesh(new THREE.PlaneGeometry(220,82.5),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(galaxyCanvas),transparent:true,depthWrite:false,opacity:.8}));
-  galaxy.position.set(-85,42,-135);galaxy.rotation.z=.32;scene.add(galaxy);
-  const sun=new THREE.Sprite(new THREE.SpriteMaterial({map:glow,color:0xffcf89,opacity:.9,depthWrite:false}));
-  sun.position.set(-18,3,-125);sun.scale.set(6,6,6);scene.add(sun);
-  const solar=new THREE.Group();solar.position.set(-18,3,-126);solar.rotation.z=-.3;solar.rotation.x=.85;scene.add(solar);
-  for(const radius of [5,8,12,17])ring(radius,0,0x8d9bb3,.05,solar);
-  for(const [r,a,size,color] of [[5,1,.32,0xbfa383],[8,3,.52,0x6f869c],[12,5,.66,0x928a82],[17,2,.9,0xb4a58d]]){
-    sphere(size,new THREE.MeshBasicMaterial({color}),r*Math.cos(a),0,r*Math.sin(a),solar);
+  for(let i=0;i<(compact?900:1600);i++){
+    const u=random()*2-1,x=u*180;
+    const y=Math.sin(u*3.1+.4)*14-6+gaussian()*14,z=Math.sin(u*3.4)*18+gaussian()*20;
+    pushParticle(haze,x,y,z,18+random()*30,.055*Math.pow(Math.max(0,1-u*u),.7),.35);
   }
+  nebula.add(particleField(haze,0,true));nebula.add(particleField(dust));
+  // Sparse nearer points give depth through larger, softer glints and a different drift speed.
+  const near=particleData();
+  for(let i=0;i<260;i++){
+    const a=random()*TAU,r=64+random()*35;
+    pushParticle(near,Math.cos(a)*r,(random()-.5)*180,Math.sin(a)*r,.40+random()*.95,.42+random()*.48,.75+random()*.23);
+  }
+  scene.add(particleField(near,1));
 
   function pose(){
     const portrait=container.clientWidth<650;
@@ -202,7 +295,7 @@ export function createSpace(container, onState=()=>{}) {
     desiredPosition.applyAxisAngle(new THREE.Vector3(0,1,0),dragX);
     desiredPosition.y+=dragY;
   }
-  function resize(){const w=container.clientWidth,h=container.clientHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();pose();}
+  function resize(){const w=container.clientWidth,h=container.clientHeight;renderer.setSize(w,h);pointScale.value=h*renderer.getPixelRatio()*.5;camera.aspect=w/h;camera.updateProjectionMatrix();pose();}
   const observer=new ResizeObserver(resize);observer.observe(container);resize();
   camera.position.copy(desiredPosition);target.copy(desiredTarget);camera.lookAt(target);
 
@@ -238,6 +331,7 @@ export function createSpace(container, onState=()=>{}) {
     if(document.hidden&&!renderer.xr.isPresenting)return;
     if(!renderer.xr.isPresenting && time-frameTime<25)return;frameTime=time;
     const dt=Math.min((time-lastTime)/1000,.05);lastTime=time;
+    if(!reduceMotion.matches&&!renderer.xr.isPresenting)skyTime.value+=dt;
     if(!renderer.xr.isPresenting){
       const smoothing=reduceMotion.matches?1:1-Math.exp(-dt*4);
       camera.position.lerp(desiredPosition,smoothing);target.lerp(desiredTarget,smoothing);

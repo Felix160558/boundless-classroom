@@ -2,7 +2,7 @@
 
 This is the deployable static website. No package manager or build step is required. Serve the repository root over HTTP for preview. Retain relative asset paths for GitHub Pages project URLs.
 
-Use the existing HTML/CSS/JS structure. Keep the home screen to three main actions: Match, Reservation, Enter the VR. Preserve the quiet, dark, spacious visual direction, the floating 3D classroom and the motto Love, Share and Peace.
+Use the existing HTML/CSS/JS structure. Keep the home screen to three main actions: Match, Reservation, Enter the VR. Preserve the quiet, dark, spacious visual direction, the floating 3D classroom and the motto Love, Share and Peace. Use a volumetric particle nebula with gentle drift and soft twinkling. Do not reintroduce solid planets or solar-system orbit decorations. Keep the cat broad-faced, compact and proportionate to the reference; do not publish original reference photographs.
 
 Match opens the offline cat teacher. Reservation is browser-local only. The spatial scene is a 3D concept; headset entry is experimental and single-user, with no verified headset tests. Never describe these as real-person matching, an LLM, WebRTC or multi-user VR.
 
