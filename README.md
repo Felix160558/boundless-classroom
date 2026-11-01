@@ -11,9 +11,9 @@ A quiet classroom floating in space. A public, static learning demo built with H
 - **Enter the VR** opens a navigable 3D classroom concept, with a whiteboard, one desk, one chair, a cat teacher and teacher/learner floor markers.
 - On a compatible HTTPS/WebXR device, an experimental single-user headset entry is offered. Actual headset compatibility has not been verified.
 
-The teacher uses the actual supplied character, including its original happy, winking and closed-eye expression poses. It retains the orange fur, round glasses, clothes, Chemistry book and curled tail. The combined asset is now 2.73 MB, about 83% smaller than the previous 15.69 MB teacher. It is preloaded as the page opens, uses a shared 2048px WebP texture and local Meshopt compression, and shows loading progress. Conservative geometry simplification and quantization reduce download and rendering cost.
+The teacher uses the original supplied 3D character. This version restores the original geometry detail and exact 4096px source JPEG texture, with no mesh simplification, texture resizing or vertex quantization. The asset is 19.64 MB: visual detail and future close-up viewing take priority over a tiny first download. Local Meshopt compression remains lossless for the stored geometry. The model starts preloading when the page opens; a browser-local model cache is used when available.
 
-Entering Match plays a short welcome smile and nod. Click or tap the 3D teacher for a wink or happy response; resting the pointer over it produces a quiet acknowledgement. There are occasional idle blinks. The classroom avatar is also a keyboard-accessible greeting button. Expressions use the supplied pose meshes and small rigid rotations; the face is never squashed or stretched. Reduced-motion preferences disable idle animation and nodding. There is no facial tracking, lip sync or skeleton animation.
+Entering Match gradually brings out a gentle closed-mouth smile. Click or tap the teacher for a smile or wink; resting the pointer over it gives a quiet acknowledgement. One fixed head mesh is used throughout: a localized smile morph moves the mouth corners and inner cheeks, while small curved 3D eyelids gradually cover the stationary eyes. The head is never replaced or rescaled. Smooth easing and damped weights preserve continuity even when an interaction interrupts another. The classroom avatar also works as a keyboard greeting button. Reduced-motion preferences disable idle motion and automatic blinking. There is no facial tracking, lip sync or full skeleton rig.
 
 The background uses continuous, gently curved stardust veils, fine particles at different depths, soft twinkling and slow drift. Warm classroom edges, subtle glazing and a softer floor finish echo the supplied visual direction. There are no solid planets or solar-system orbit decorations. Reference images themselves are not published.
 
@@ -44,8 +44,8 @@ This folder is ready to publish from the repository main branch root. In Setting
 - app.js — navigation, local booking, offline teaching UI and capability states
 - tutor.js — original Room 001 lesson scripts
 - space-scene.js — 3D classroom, provided teacher loading, cosmos, camera and optional single-user WebXR
-- cat-teacher.glb — compressed teacher and three supplied expression poses in one download
-- cat-teacher.js — loading, expression timing, rigid poses and teacher picking
+- cat-teacher.glb — original-detail teacher with a continuous smile morph and eyelid surface metadata
+- cat-teacher.js — local model cache, continuous facial weights, curved eyelids and teacher picking
 - meshopt_decoder.mjs / MESHOPT-LICENSE.txt — pinned Meshoptimizer 1.3.0 decoder and MIT notice
 - GLTFLoader.js / BufferGeometryUtils.js — local Three.js r161 loader and utility
 - three.module.min.js / THREE-LICENSE.txt — pinned Three.js runtime and MIT notice
