@@ -123,7 +123,7 @@ function fallback(message){
   document.body.classList.add('fallback');$('#scene-loading').hidden=true;$('#fallback-note').hidden=false;
   if(message)$('#fallback-note').textContent=message;
 }
-import('./space-scene.js?v=nebula-2').then(async({createSpace})=>{
+import('./space-scene.js?v=stardust-3').then(async({createSpace})=>{
   space=createSpace($('#universe'),state=>{
     if(state==='ready')$('#scene-loading').hidden=true;
     if(state==='lost')fallback('3D 画面暂时中断。请刷新恢复，教学与预约演示仍可使用。');

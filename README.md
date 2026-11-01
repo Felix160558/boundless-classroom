@@ -11,7 +11,9 @@ A quiet classroom floating in space. A public, static learning demo built with H
 - **Enter the VR** opens a navigable 3D classroom concept, with a whiteboard, one desk, one chair, a cat teacher and teacher/learner floor markers.
 - On a compatible HTTPS/WebXR device, an experimental single-user headset entry is offered. Actual headset compatibility has not been verified.
 
-The golden cat is a procedural cartoon inspired by the founder's cat: a broad rounded face, smaller soft-edged ears, pale chin and chest, and compact paws. It remains a stylized prototype rather than a final likeness. The background is a volumetric particle nebula with layered depth, soft twinkling and slow harmonious drift. All solid planets and solar-system orbit motifs have been removed. Everything is generated locally in code, not copied from another product's assets.
+The first teacher is a fully 3D orange cat designed from a supplied front/side/back character sheet. The character wears round glasses, an ivory shirt, a knitted beige vest, a navy tie and short trousers, and holds a navy Chemistry textbook. Fine silhouette strands and a curled tail soften the procedural model; it remains a stylized real-time prototype.
+
+The background uses continuous, gently curved stardust veils, fine particles at different depths, soft twinkling and slow drift. Warm classroom edges, subtle glazing and a softer floor finish echo the supplied visual direction. There are no solid planets or solar-system orbit decorations. Reference images themselves are not published.
 
 ## Honest demo boundaries
 
