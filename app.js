@@ -123,9 +123,17 @@ function fallback(message){
   document.body.classList.add('fallback');$('#scene-loading').hidden=true;$('#fallback-note').hidden=false;
   if(message)$('#fallback-note').textContent=message;
 }
-import('./space-scene.js?v=stardust-3').then(async({createSpace})=>{
-  space=createSpace($('#universe'),state=>{
+import('./space-scene.js?v=provided-cat-4').then(async({createSpace})=>{
+  space=createSpace($('#universe'),(state,detail)=>{
     if(state==='ready')$('#scene-loading').hidden=true;
+    if(state==='teacher-loading'){
+      const indicator=$('#scene-loading');indicator.replaceChildren(document.createElement('span'),document.createTextNode(' 正在载入你的猫老师'));indicator.hidden=false;
+    }
+    if(state==='teacher-progress')$('#scene-loading').lastChild.textContent=' 正在载入你的猫老师 · '+detail+'%';
+    if(state==='teacher-ready')$('#scene-loading').hidden=true;
+    if(state==='teacher-error'){
+      $('#scene-loading').hidden=true;$('#fallback-note').textContent='猫老师模型暂时未能载入，刷新可重试。离线教学与预约仍可使用。';$('#fallback-note').hidden=false;
+    }
     if(state==='lost')fallback('3D 画面暂时中断。请刷新恢复，教学与预约演示仍可使用。');
     if(state==='restored'){document.body.classList.remove('fallback');$('#fallback-note').hidden=true;}
     if(state==='xr-start'){$('#xr-status').textContent='单人头显概念场景 · 非多人课堂';}

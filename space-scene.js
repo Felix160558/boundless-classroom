@@ -1,4 +1,5 @@
 import * as THREE from './three.module.min.js';
+import {GLTFLoader} from './GLTFLoader.js';
 
 const TAU = Math.PI * 2;
 function seeded(seed=71){return()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};}
@@ -117,158 +118,34 @@ export function createSpace(container, onState=()=>{}) {
   }
   floorLabel('TEACHER',-2.6,.9);floorLabel('LEARNER',.8,2.8);
 
-  function createCat(){
-    // Full 3D character built from the supplied front / side / back design sheet.
-    const cat=new THREE.Group();cat.position.set(-2.55,.1,.35);cat.scale.setScalar(.90);cat.rotation.y=.25;room.add(cat);
-    const randomFur=seeded(83);
-    const fur=new THREE.MeshStandardMaterial({color:0xdca052,roughness:.96});
-    const cream=new THREE.MeshStandardMaterial({color:0xf4dfba,roughness:.98});
-    const pink=new THREE.MeshStandardMaterial({color:0xe2ada2,roughness:.92});
-    const navy=new THREE.MeshStandardMaterial({color:0x30394b,roughness:.8});
-    const gold=new THREE.MeshStandardMaterial({color:0xc5a66a,metalness:.58,roughness:.4});
-    const spectacles=new THREE.MeshStandardMaterial({color:0x58462f,metalness:.72,roughness:.3});
-    function knitTexture(){
-      const c=document.createElement('canvas');c.width=c.height=256;const ctx=c.getContext('2d');
-      ctx.fillStyle='#888';ctx.fillRect(0,0,256,256);ctx.lineWidth=3;ctx.lineCap='round';
-      for(let x=-16;x<272;x+=16)for(let y=-24;y<280;y+=24){
-        ctx.strokeStyle='#b0b0b0';ctx.beginPath();ctx.moveTo(x-5,y-8);ctx.quadraticCurveTo(x-3,y+3,x,y+7);ctx.stroke();
-        ctx.strokeStyle='#666';ctx.beginPath();ctx.moveTo(x+5,y-8);ctx.quadraticCurveTo(x+3,y+3,x,y+7);ctx.stroke();
-      }
-      const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(3,2);return t;
+  // The user's textured GLB replaces the procedural character entirely.
+  const cat=new THREE.Group();cat.position.set(-2.55,.1,.35);cat.rotation.y=.25;room.add(cat);
+  async function loadProvidedTeacher(){
+    onState('teacher-loading');
+    try{
+      const loader=new GLTFLoader();
+      const asset=await loader.loadAsync(new URL('./cat-teacher.glb?v=provided-cat-4',import.meta.url).href,event=>{
+        if(event.total>0)onState('teacher-progress',Math.min(99,Math.round(event.loaded/event.total*100)));
+      });
+      const teacher=asset.scene;
+      const bounds=new THREE.Box3().setFromObject(teacher),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
+      const fit=2.25/Math.max(size.y,.001);teacher.scale.setScalar(fit);
+      teacher.position.set(-center.x*fit,-bounds.min.y*fit,-center.z*fit);
+      teacher.traverse(node=>{
+        if(!node.isMesh)return;
+        node.castShadow=true;node.receiveShadow=false;
+        const convert=material=>{
+          // The supplied texture already contains its lighting. Keep its colors without double-lighting it.
+          const display=new THREE.MeshBasicMaterial({map:material.map,color:material.color,side:material.side,toneMapped:false});
+          material.dispose();return display;
+        };
+        node.material=Array.isArray(node.material)?node.material.map(convert):convert(node.material);
+      });
+      cat.add(teacher);onState('teacher-ready');
+    }catch(error){
+      console.warn('The provided cat teacher model could not be loaded.',error);onState('teacher-error');
     }
-    const knit=knitTexture();
-    const vest=new THREE.MeshStandardMaterial({color:0xd9bea0,roughness:.96,bumpMap:knit,bumpScale:.012});
-    const shirt=new THREE.MeshStandardMaterial({color:0xf4eee3,roughness:.93,bumpMap:knit,bumpScale:.002});
-    const trousers=new THREE.MeshStandardMaterial({color:0xb9a083,roughness:1,bumpMap:knit,bumpScale:.003});
-    function clothPatch(vertices,mat){
-      const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(vertices.flat(),3));
-      g.setIndex(vertices.length===3?[0,1,2]:[0,1,2,0,2,3]);g.computeVertexNormals();
-      const o=mesh(g,mat,cat);o.material.side=THREE.DoubleSide;return o;
-    }
-    // Short trousers, separate grounded paws and a continuous knitted torso.
-    for(const side of [-1,1]){
-      const leg=mesh(new THREE.CapsuleGeometry(.185,.17,8,24),trousers,cat,side*.20,.34,0);leg.scale.z=.86;
-      const hem=mesh(new THREE.TorusGeometry(.18,.012,6,32),trousers,cat,side*.20,.205,.005);hem.rotation.x=Math.PI/2;hem.scale.y=.86;
-      sphere(.185,cream,side*.20,.105,.10,cat,[1.04,.56,1.25]);
-      for(const offset of [-.052,.052]){
-        const curve=new THREE.QuadraticBezierCurve3(new THREE.Vector3(side*.20+offset,.12,.315),new THREE.Vector3(side*.20+offset,.16,.29),new THREE.Vector3(side*.20+offset,.18,.25));
-        cat.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(8)),new THREE.LineBasicMaterial({color:0xb69974,transparent:true,opacity:.33})));
-      }
-    }
-    const torsoProfile=[[.27,.50],[.36,.52],[.425,.68],[.435,.99],[.39,1.23],[.30,1.39],[.235,1.44]].map(v=>new THREE.Vector2(...v));
-    const torso=mesh(new THREE.LatheGeometry(torsoProfile,48),vest,cat);torso.scale.z=.72;
-    // Ribbed hem and neckline remain readable at the home-page scale.
-    const hem=mesh(new THREE.TorusGeometry(.325,.034,8,48),vest,cat,0,.53,0);hem.rotation.x=Math.PI/2;hem.scale.set(1.10,.72,1);
-    clothPatch([[-.31,1.36,.20],[0,1.03,.323],[.31,1.36,.20]],shirt);
-    tube([[-.32,1.38,.215],[0,1.045,.34],[.32,1.38,.215]],.023,navy,cat);
-    tube([[-.35,1.39,.20],[0,1.006,.35],[.35,1.39,.20]],.014,cream,cat);
-    clothPatch([[-.07,1.435,.245],[-.31,1.365,.24],[-.13,1.215,.338],[0,1.355,.33]],shirt);
-    clothPatch([[.07,1.435,.245],[.31,1.365,.24],[.13,1.215,.338],[0,1.355,.33]],shirt);
-    clothPatch([[-.06,1.35,.35],[.055,1.35,.35],[.063,1.27,.37],[0,1.235,.38]],navy);
-    clothPatch([[-.037,1.26,.383],[.035,1.26,.383],[.075,1.105,.351],[0,1.065,.358]],navy);
-    tube([[-.026,1.23,.39],[.054,1.19,.377]],.006,gold,cat);
-    tube([[-.009,1.14,.374],[.051,1.11,.367]],.006,gold,cat);
-    // Folded shirt sleeves and softly bent arms, with the left paw holding the book.
-    const leftArm=new THREE.Group();leftArm.position.set(-.40,1.21,0);leftArm.rotation.z=-.18;cat.add(leftArm);
-    sphere(.18,shirt,0,-.105,0,leftArm,[1,1.35,.96]);
-    const cuff=mesh(new THREE.TorusGeometry(.15,.033,8,28),shirt,leftArm,0,-.285,.005);cuff.rotation.x=Math.PI/2;
-    sphere(.143,fur,0,-.36,.025,leftArm,[.97,1.12,.95]);sphere(.153,cream,.005,-.48,.065,leftArm,[1,.91,1.0]);
-    const rightArm=new THREE.Group();rightArm.position.set(.40,1.21,0);rightArm.rotation.z=.32;cat.add(rightArm);
-    sphere(.18,shirt,0,-.10,0,rightArm,[1,1.15,1]);
-    const rightCuff=mesh(new THREE.TorusGeometry(.15,.03,8,28),shirt,rightArm,0,-.24,.08);rightCuff.rotation.x=Math.PI/2;
-    // A navy chemistry textbook, with its own generated cover, page block and gold spine.
-    const book=new THREE.Group();book.position.set(.41,.98,.405);book.rotation.z=-.10;book.rotation.y=-.12;cat.add(book);
-    box(.54,.77,.105,new THREE.MeshStandardMaterial({color:0xdad2bd,roughness:.9}),0,0,0,book);
-    box(.585,.82,.018,navy,0,0,.064,book);box(.585,.82,.018,navy,0,0,-.064,book);
-    box(.035,.82,.15,navy,-.282,0,0,book);
-    for(const y of [-.32,.30])box(.027,.018,.153,gold,-.282,y,0,book);
-    const cover=document.createElement('canvas');cover.width=768;cover.height=1024;
-    const bc=cover.getContext('2d');bc.fillStyle='#30394b';bc.fillRect(0,0,768,1024);
-    bc.strokeStyle='#bfa66c';bc.lineWidth=3;bc.strokeRect(42,42,684,940);bc.strokeRect(58,58,652,908);
-    bc.fillStyle='#ddc58a';bc.textAlign='center';bc.font='bold 86px Georgia';bc.fillText('Chemistry',384,265);
-    bc.lineWidth=5;bc.beginPath();for(let i=0;i<=6;i++){const a=i/6*TAU-Math.PI/2;const x=384+112*Math.cos(a),y=510+112*Math.sin(a);if(i===0)bc.moveTo(x,y);else bc.lineTo(x,y);}bc.stroke();
-    for(let i=0;i<6;i++){const a=i/6*TAU-Math.PI/2;bc.beginPath();bc.arc(384+112*Math.cos(a),510+112*Math.sin(a),9,0,TAU);bc.fill();}
-    bc.font='22px Arial';bc.fillText('BOUNDLESS CLASSROOM',384,870);
-    const coverMap=new THREE.CanvasTexture(cover);coverMap.colorSpace=THREE.SRGBColorSpace;
-    mesh(new THREE.PlaneGeometry(.566,.797),new THREE.MeshBasicMaterial({map:coverMap,toneMapped:false}),book,0,0,.076);
-    tube([[.43,1.0,.12],[.49,.94,.32],[.61,.99,.52]],.115,fur,cat);
-    sphere(.155,fur,.61,.99,.52,cat,[.90,1.0,.78]);
-    sphere(.115,cream,.61,.96,.585,cat,[1.05,.88,.36]);
-    // Broad amber-eyed head with a pale muzzle that blends into the cheek fur.
-    const head=new THREE.Group();head.position.set(0,1.82,.01);head.rotation.z=.018;cat.add(head);
-    const headGeo=new THREE.SphereGeometry(.55,64,48),colors=[];
-    const baseGold=new THREE.Color(0xd59549),pale=new THREE.Color(0xf4e1bd),stripeColor=new THREE.Color(0xbf7f40);
-    const hp=headGeo.attributes.position;
-    for(let i=0;i<hp.count;i++){
-      const x=hp.getX(i),y=hp.getY(i),z=hp.getZ(i);
-      const chin=THREE.MathUtils.smoothstep(-y,-.06,.30)*THREE.MathUtils.smoothstep(z,-.14,.27);
-      const color=baseGold.clone().lerp(pale,chin*.94);
-      const stripe=(Math.exp(-x*x/.0009)+Math.exp(-Math.pow(Math.abs(x)-.13-.18*y,2)/.0008))*.18;
-      color.lerp(stripeColor,Math.min(.3,stripe)*THREE.MathUtils.smoothstep(y,.10,.38)*THREE.MathUtils.smoothstep(z,.13,.38));
-      colors.push(color.r,color.g,color.b);
-    }
-    headGeo.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
-    const headMesh=mesh(headGeo,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.97}),head);headMesh.scale.set(1.13,.96,.94);
-    // Fine instanced cutout strands soften the silhouette without turning it into a fur sphere.
-    const furCanvas=document.createElement('canvas');furCanvas.width=64;furCanvas.height=128;const fc=furCanvas.getContext('2d');
-    fc.fillStyle='#000';fc.fillRect(0,0,64,128);fc.lineCap='round';
-    for(let i=0;i<13;i++){
-      const x=12+randomFur()*40;fc.strokeStyle='rgba(255,255,255,'+(.5+randomFur()*.5)+')';fc.lineWidth=.9+randomFur()*1.2;
-      fc.beginPath();fc.moveTo(x,126);fc.quadraticCurveTo(x-6+randomFur()*12,62,x-9+randomFur()*18,8+randomFur()*20);fc.stroke();
-    }
-    const furAlpha=new THREE.CanvasTexture(furCanvas);
-    const strandMat=new THREE.MeshBasicMaterial({color:0xffffff,alphaMap:furAlpha,alphaTest:.20,side:THREE.DoubleSide,toneMapped:false});
-    const strandGeo=new THREE.PlaneGeometry(1,1);
-    const hair=new THREE.InstancedMesh(strandGeo,strandMat,1300);hair.castShadow=false;hair.receiveShadow=true;head.add(hair);
-    const dummy=new THREE.Object3D(),up=new THREE.Vector3(0,1,0);
-    for(let i=0;i<1300;i++){
-      const a=randomFur()*TAU,u=randomFur()*2-1;const n=new THREE.Vector3(Math.sqrt(1-u*u)*Math.cos(a),u,Math.sqrt(1-u*u)*Math.sin(a));
-      const face=n.z>.35&&n.y<.80&&n.y>-.75;
-      const length=face?.022:.055+randomFur()*.035;
-      dummy.position.set(n.x*.55*1.13,n.y*.55*.96,n.z*.55*.94);dummy.position.addScaledVector(n,length*.28);
-      dummy.quaternion.setFromUnitVectors(up,n);dummy.rotateY(randomFur()*TAU);dummy.scale.set(face?0:.018+randomFur()*.018,face?0:length,1);dummy.updateMatrix();hair.setMatrixAt(i,dummy.matrix);
-      const col=new THREE.Color(0xf0d29c).lerp(new THREE.Color(0xf5e4c7),THREE.MathUtils.smoothstep(-n.y,-.15,.62)*THREE.MathUtils.smoothstep(n.z,-.3,.5));
-      col.multiplyScalar(.94+randomFur()*.16);hair.setColorAt(i,col);
-    }
-    function softEar(w,h){const e=new THREE.Shape();e.moveTo(-w/2,0);e.bezierCurveTo(-w*.50,h*.3,-w*.27,h*.91,-w*.07,h);e.bezierCurveTo(w*.10,h*1.04,w*.31,h*.55,w/2,0);e.quadraticCurveTo(0,-.045,-w/2,0);return e;}
-    const iris=new THREE.MeshPhysicalMaterial({color:0xb99a4d,roughness:.25,clearcoat:.65});
-    const pupil=new THREE.MeshPhysicalMaterial({color:0x151a17,roughness:.10,clearcoat:1});
-    const eyeRim=new THREE.MeshStandardMaterial({color:0x6a5032,roughness:.8});
-    const highlight=new THREE.MeshBasicMaterial({color:0xfffcf1});
-    for(const side of [-1,1]){
-      const ear=new THREE.Group();ear.position.set(side*.385,.39,-.025);ear.rotation.z=-side*.17;head.add(ear);
-      const geo=new THREE.ExtrudeGeometry(softEar(.30,.35),{depth:.06,bevelEnabled:true,bevelSegments:4,steps:1,bevelSize:.025,bevelThickness:.025,curveSegments:16});
-      mesh(geo,fur,ear);mesh(new THREE.ShapeGeometry(softEar(.20,.26),20),pink,ear,0,.026,.091);
-      const eye=new THREE.Group();eye.position.set(side*.227,.049,.457);eye.rotation.y=side*.21;head.add(eye);
-      sphere(.142,eyeRim,0,0,0,eye,[1,.99,.20]);sphere(.131,iris,0,0,.019,eye,[1,.98,.21]);
-      sphere(.096,pupil,-side*.009,.002,.044,eye,[.89,1.03,.24]);
-      sphere(.032,highlight,-.029,.042,.071,eye,[1,.94,.20]);sphere(.010,highlight,.028,-.034,.069,eye,[1,1,.20]);
-      const frame=mesh(new THREE.TorusGeometry(.172,.009,10,64),spectacles,head,side*.227,.049,.532);frame.rotation.y=side*.18;
-      tube([[side*.398,.055,.50],[side*.57,.07,.35],[side*.57,.045,.12]],.008,spectacles,head);
-      sphere(.174,cream,side*.116,-.179,.445,head,[1.10,.71,.45]);
-      for(let j=0;j<3;j++){
-        const y=-.16+j*.033,curve=new THREE.CatmullRomCurve3([new THREE.Vector3(side*.20,y,.48),new THREE.Vector3(side*.40,y+.012*(j-1),.49),new THREE.Vector3(side*.64,y+.053*(j-1),.44)]);
-        head.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(12)),new THREE.LineBasicMaterial({color:0xf3e2c3,transparent:true,opacity:.72})));
-      }
-    }
-    tube([[-.055,.052,.55],[0,.083,.568],[.055,.052,.55]],.007,spectacles,head);
-    sphere(.044,new THREE.MeshStandardMaterial({color:0xcc9289,roughness:.75}),0,-.145,.533,head,[1.08,.70,.50]);
-    for(const side of [-1,1]){
-      const c=new THREE.QuadraticBezierCurve3(new THREE.Vector3(0,-.172,.520),new THREE.Vector3(side*.03,-.224,.516),new THREE.Vector3(side*.079,-.204,.502));
-      head.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(c.getPoints(12)),new THREE.LineBasicMaterial({color:0x9e7862,transparent:true,opacity:.65})));
-    }
-    // A bushy curled tail is visible from the side and back, matching the character sheet.
-    const tailCurve=new THREE.CatmullRomCurve3([[0,.46,-.27],[.44,.48,-.43],[.63,.72,-.46],[.57,1.04,-.46],[.38,1.13,-.42]].map(v=>new THREE.Vector3(...v)));
-    mesh(new THREE.TubeGeometry(tailCurve,40,.14,16,false),fur,cat);
-    sphere(.147,cream,.38,1.13,-.42,cat);
-    const tailHair=new THREE.InstancedMesh(strandGeo,strandMat,600);tailHair.castShadow=false;cat.add(tailHair);
-    for(let i=0;i<600;i++){
-      const t=randomFur(),center=tailCurve.getPoint(t),tangent=tailCurve.getTangent(t);let n=new THREE.Vector3(Math.cos(i*2.4),Math.sin(i*2.4),Math.cos(i*.79));n.addScaledVector(tangent,-n.dot(tangent)).normalize();
-      const length=.065+randomFur()*.055;dummy.position.copy(center).addScaledVector(n,.14+length*.22);dummy.quaternion.setFromUnitVectors(up,n);dummy.rotateY(randomFur()*TAU);dummy.scale.set(.027,length,1);dummy.updateMatrix();tailHair.setMatrixAt(i,dummy.matrix);tailHair.setColorAt(i,new THREE.Color(0xeec286).lerp(new THREE.Color(0xf5e1bd),t*.60));
-    }
-    return cat;
   }
-  const cat=createCat();
 
   // A volumetric particle ribbon: every point has real depth, never a flat galaxy card.
   // No solid planets or solar-system orbit decorations.
@@ -464,7 +341,6 @@ export function createSpace(container, onState=()=>{}) {
       camera.position.lerp(desiredPosition,smoothing);target.lerp(desiredTarget,smoothing);
       const look=target.clone();if(!reduceMotion.matches&&!moving){look.x+=pointerX*.18;look.y-=pointerY*.12;}camera.lookAt(look);
       room.position.y=reduceMotion.matches?0:Math.sin(time*.00035)*.045;
-      cat.scale.y=.90*(1+(reduceMotion.matches?0:Math.sin(time*.0016)*.006));
     } else room.position.y=0;
     renderer.render(scene,camera);
   });
@@ -479,5 +355,6 @@ export function createSpace(container, onState=()=>{}) {
     onState('xr-start');
   }
   onState('ready');
+  loadProvidedTeacher();
   return {setMode,setBoard,resize,immersiveSupported,enterImmersive,async endImmersive(){if(session)await session.end();}};
 }

@@ -11,7 +11,7 @@ A quiet classroom floating in space. A public, static learning demo built with H
 - **Enter the VR** opens a navigable 3D classroom concept, with a whiteboard, one desk, one chair, a cat teacher and teacher/learner floor markers.
 - On a compatible HTTPS/WebXR device, an experimental single-user headset entry is offered. Actual headset compatibility has not been verified.
 
-The first teacher is a fully 3D orange cat designed from a supplied front/side/back character sheet. The character wears round glasses, an ivory shirt, a knitted beige vest, a navy tie and short trousers, and holds a navy Chemistry textbook. Fine silhouette strands and a curled tail soften the procedural model; it remains a stylized real-time prototype.
+The teacher is the actual textured 3D character supplied for this project, extracted from a larger multi-character GLB. It retains the original orange fur, face, round glasses, ivory shirt, beige vest, navy tie, short trousers, Chemistry book and curled tail. The selected full-body teacher retains its original 170,111 vertices and 322,092 triangles. Its 4096px texture is re-encoded for a 15.7 MB download; initial loading has a visible progress state. This static model has no skeleton or expression animation.
 
 The background uses continuous, gently curved stardust veils, fine particles at different depths, soft twinkling and slow drift. Warm classroom edges, subtle glazing and a softer floor finish echo the supplied visual direction. There are no solid planets or solar-system orbit decorations. Reference images themselves are not published.
 
@@ -41,9 +41,11 @@ This folder is ready to publish from the repository main branch root. In Setting
 - styles.css — responsive space interface
 - app.js — navigation, local booking, offline teaching UI and capability states
 - tutor.js — original Room 001 lesson scripts
-- space-scene.js — procedural 3D classroom, cosmos, camera and optional single-user WebXR
+- space-scene.js — 3D classroom, provided teacher loading, cosmos, camera and optional single-user WebXR
+- cat-teacher.glb — the selected textured teacher from the supplied model
+- GLTFLoader.js / BufferGeometryUtils.js — local Three.js r161 loader and utility
 - three.module.min.js / THREE-LICENSE.txt — pinned Three.js runtime and MIT notice
 
 Bookings are stored only under localStorage key boundless_demo_booking. Chat is in page memory and is cleared on reload. Browser text-to-speech behavior depends on the browser and operating system. Neither site files nor this public repository contain chat archives, original cat photographs or service credentials.
 
-THREE-LICENSE.txt covers the bundled third-party Three.js runtime. A separate license for the original project code has not been selected.
+THREE-LICENSE.txt covers the bundled third-party Three.js runtime, GLTFLoader and BufferGeometryUtils. The supplied character asset is included for this demo; no separate downstream redistribution license has been declared. A separate license for the original project code has not been selected.
