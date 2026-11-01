@@ -11,7 +11,9 @@ A quiet classroom floating in space. A public, static learning demo built with H
 - **Enter the VR** opens a navigable 3D classroom concept, with a whiteboard, one desk, one chair, a cat teacher and teacher/learner floor markers.
 - On a compatible HTTPS/WebXR device, an experimental single-user headset entry is offered. Actual headset compatibility has not been verified.
 
-The teacher is the actual textured 3D character supplied for this project, extracted from a larger multi-character GLB. It retains the original orange fur, face, round glasses, ivory shirt, beige vest, navy tie, short trousers, Chemistry book and curled tail. The selected full-body teacher retains its original 170,111 vertices and 322,092 triangles. Its 4096px texture is re-encoded for a 15.7 MB download; initial loading has a visible progress state. This static model has no skeleton or expression animation.
+The teacher uses the actual supplied character, including its original happy, winking and closed-eye expression poses. It retains the orange fur, round glasses, clothes, Chemistry book and curled tail. The combined asset is now 2.73 MB, about 83% smaller than the previous 15.69 MB teacher. It is preloaded as the page opens, uses a shared 2048px WebP texture and local Meshopt compression, and shows loading progress. Conservative geometry simplification and quantization reduce download and rendering cost.
+
+Entering Match plays a short welcome smile and nod. Click or tap the 3D teacher for a wink or happy response; resting the pointer over it produces a quiet acknowledgement. There are occasional idle blinks. The classroom avatar is also a keyboard-accessible greeting button. Expressions use the supplied pose meshes and small rigid rotations; the face is never squashed or stretched. Reduced-motion preferences disable idle animation and nodding. There is no facial tracking, lip sync or skeleton animation.
 
 The background uses continuous, gently curved stardust veils, fine particles at different depths, soft twinkling and slow drift. Warm classroom edges, subtle glazing and a softer floor finish echo the supplied visual direction. There are no solid planets or solar-system orbit decorations. Reference images themselves are not published.
 
@@ -42,10 +44,12 @@ This folder is ready to publish from the repository main branch root. In Setting
 - app.js — navigation, local booking, offline teaching UI and capability states
 - tutor.js — original Room 001 lesson scripts
 - space-scene.js — 3D classroom, provided teacher loading, cosmos, camera and optional single-user WebXR
-- cat-teacher.glb — the selected textured teacher from the supplied model
+- cat-teacher.glb — compressed teacher and three supplied expression poses in one download
+- cat-teacher.js — loading, expression timing, rigid poses and teacher picking
+- meshopt_decoder.mjs / MESHOPT-LICENSE.txt — pinned Meshoptimizer 1.3.0 decoder and MIT notice
 - GLTFLoader.js / BufferGeometryUtils.js — local Three.js r161 loader and utility
 - three.module.min.js / THREE-LICENSE.txt — pinned Three.js runtime and MIT notice
 
 Bookings are stored only under localStorage key boundless_demo_booking. Chat is in page memory and is cleared on reload. Browser text-to-speech behavior depends on the browser and operating system. Neither site files nor this public repository contain chat archives, original cat photographs or service credentials.
 
-THREE-LICENSE.txt covers the bundled third-party Three.js runtime, GLTFLoader and BufferGeometryUtils. The supplied character asset is included for this demo; no separate downstream redistribution license has been declared. A separate license for the original project code has not been selected.
+THREE-LICENSE.txt covers the bundled third-party Three.js runtime, GLTFLoader and BufferGeometryUtils. MESHOPT-LICENSE.txt covers the bundled Meshoptimizer decoder. The supplied character asset is included for this demo; no separate downstream redistribution license has been declared. A separate license for the original project code has not been selected.

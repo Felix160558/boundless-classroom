@@ -22,6 +22,7 @@ function updateMode(){
   else if(currentMode==='home'&&next)$('#open-match').focus({preventScroll:true});
 }
 function navigate(mode){if(currentMode===mode)return;location.hash=mode==='home'?'home':mode;}
+$('#teacher-action').addEventListener('click',()=>space?.greetTeacher());
 $('#open-match').addEventListener('click',()=>navigate('classroom'));
 $('#enter-vr').addEventListener('click',()=>navigate('vr'));
 $('#back-home').addEventListener('click',async()=>{
@@ -123,7 +124,7 @@ function fallback(message){
   document.body.classList.add('fallback');$('#scene-loading').hidden=true;$('#fallback-note').hidden=false;
   if(message)$('#fallback-note').textContent=message;
 }
-import('./space-scene.js?v=provided-cat-4').then(async({createSpace})=>{
+import('./space-scene.js?v=lively-cat-5').then(async({createSpace})=>{
   space=createSpace($('#universe'),(state,detail)=>{
     if(state==='ready')$('#scene-loading').hidden=true;
     if(state==='teacher-loading'){

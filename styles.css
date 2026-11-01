@@ -15,3 +15,5 @@ dialog{color:var(--paper);width:min(490px,calc(100% - 28px));max-height:calc(100
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 
 .teacher-avatar svg{display:block;width:34px;height:34px}
+
+.teacher-avatar{padding:0;cursor:pointer}.teacher-avatar:focus-visible{outline:1px solid #e8d8bb;outline-offset:4px}

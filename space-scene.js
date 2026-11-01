@@ -1,5 +1,5 @@
 import * as THREE from './three.module.min.js';
-import {GLTFLoader} from './GLTFLoader.js';
+import {createCatTeacher} from './cat-teacher.js?v=lively-cat-5';
 
 const TAU = Math.PI * 2;
 function seeded(seed=71){return()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};}
@@ -118,34 +118,7 @@ export function createSpace(container, onState=()=>{}) {
   }
   floorLabel('TEACHER',-2.6,.9);floorLabel('LEARNER',.8,2.8);
 
-  // The user's textured GLB replaces the procedural character entirely.
-  const cat=new THREE.Group();cat.position.set(-2.55,.1,.35);cat.rotation.y=.25;room.add(cat);
-  async function loadProvidedTeacher(){
-    onState('teacher-loading');
-    try{
-      const loader=new GLTFLoader();
-      const asset=await loader.loadAsync(new URL('./cat-teacher.glb?v=provided-cat-4',import.meta.url).href,event=>{
-        if(event.total>0)onState('teacher-progress',Math.min(99,Math.round(event.loaded/event.total*100)));
-      });
-      const teacher=asset.scene;
-      const bounds=new THREE.Box3().setFromObject(teacher),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
-      const fit=2.25/Math.max(size.y,.001);teacher.scale.setScalar(fit);
-      teacher.position.set(-center.x*fit,-bounds.min.y*fit,-center.z*fit);
-      teacher.traverse(node=>{
-        if(!node.isMesh)return;
-        node.castShadow=true;node.receiveShadow=false;
-        const convert=material=>{
-          // The supplied texture already contains its lighting. Keep its colors without double-lighting it.
-          const display=new THREE.MeshBasicMaterial({map:material.map,color:material.color,side:material.side,toneMapped:false});
-          material.dispose();return display;
-        };
-        node.material=Array.isArray(node.material)?node.material.map(convert):convert(node.material);
-      });
-      cat.add(teacher);onState('teacher-ready');
-    }catch(error){
-      console.warn('The provided cat teacher model could not be loaded.',error);onState('teacher-error');
-    }
-  }
+  const teacher=createCatTeacher(onState);room.add(teacher.group);
 
   // A volumetric particle ribbon: every point has real depth, never a flat galaxy card.
   // No solid planets or solar-system orbit decorations.
@@ -301,16 +274,30 @@ export function createSpace(container, onState=()=>{}) {
   const observer=new ResizeObserver(resize);observer.observe(container);resize();
   camera.position.copy(desiredPosition);target.copy(desiredTarget);camera.lookAt(target);
 
-  let previousPinch=0;const touches=new Map();
+  let previousPinch=0,tapCandidate=null,hovered=false,hoverStarted=0,lastLook=-10,teacherTime=0;
+  const touches=new Map(),teacherRay=new THREE.Raycaster(),pointerNdc=new THREE.Vector2();
   const canvas=renderer.domElement;
+  function hitsTeacher(e,precise=false){
+    const rect=canvas.getBoundingClientRect();
+    pointerNdc.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);
+    camera.updateMatrixWorld();teacherRay.setFromCamera(pointerNdc,camera);
+    return teacher.hitTest(teacherRay,precise);
+  }
   function pointerDown(e){
+    tapCandidate=touches.size===0?{id:e.pointerId,x:e.clientX,y:e.clientY,cancelled:false}:null;
+    hovered=false;
     moving=true;lastX=e.clientX;lastY=e.clientY;
     touches.set(e.pointerId,{x:e.clientX,y:e.clientY});canvas.setPointerCapture(e.pointerId);canvas.style.cursor='grabbing';
     if(touches.size===2){const p=[...touches.values()];previousPinch=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y);}
   }
   function pointerMove(e){
     const rect=canvas.getBoundingClientRect();pointerX=(e.clientX-rect.left)/rect.width-.5;pointerY=(e.clientY-rect.top)/rect.height-.5;
-    if(!moving)return;
+    if(!moving){
+      const over=e.pointerType!=='touch'&&hitsTeacher(e);
+      if(over&&!hovered)hoverStarted=teacherTime;hovered=over;
+      canvas.style.cursor=over?'pointer':'grab';return;
+    }
+    if(tapCandidate&&Math.hypot(e.clientX-tapCandidate.x,e.clientY-tapCandidate.y)>8)tapCandidate.cancelled=true;
     if(touches.has(e.pointerId))touches.set(e.pointerId,{x:e.clientX,y:e.clientY});
     if(touches.size===2){
       const p=[...touches.values()],distance=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y);
@@ -318,21 +305,32 @@ export function createSpace(container, onState=()=>{}) {
     }else{dragX=THREE.MathUtils.clamp(dragX-(e.clientX-lastX)*.003,-1.05,1.05);dragY=THREE.MathUtils.clamp(dragY+(e.clientY-lastY)*.008,-2,5);}
     lastX=e.clientX;lastY=e.clientY;pose();
   }
-  function pointerUp(e){touches.delete(e.pointerId);moving=touches.size>0;previousPinch=0;canvas.style.cursor='grab';}
+  function pointerUp(e){
+    const tap=e.type==='pointerup'&&tapCandidate?.id===e.pointerId&&!tapCandidate.cancelled&&touches.size===1;
+    touches.delete(e.pointerId);moving=touches.size>0;previousPinch=0;tapCandidate=null;
+    if(tap&&hitsTeacher(e,true))teacher.react('tap');
+    canvas.style.cursor='grab';
+  }
   function wheel(e){if(mode==='home')return;e.preventDefault();zoom=THREE.MathUtils.clamp(zoom+e.deltaY*.0005,.6,1.65);pose();}
   canvas.style.cursor='grab';canvas.addEventListener('pointerdown',pointerDown);canvas.addEventListener('pointermove',pointerMove);
+  canvas.addEventListener('pointerleave',()=>{hovered=false;});
   canvas.addEventListener('pointerup',pointerUp);canvas.addEventListener('pointercancel',pointerUp);
   canvas.addEventListener('wheel',wheel,{passive:false});
   canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();onState('lost');});
   canvas.addEventListener('webglcontextrestored',()=>onState('restored'));
 
-  function setMode(next){mode=next;zoom=1;dragX=dragY=0;pose();}
+  function setMode(next){teacher.setClassroomMode(next==='classroom');mode=next;zoom=1;dragX=dragY=0;pose();}
   function setBoard(title,subtitle){boardTitle=title;boardSubtitle=subtitle;drawBoard();}
   renderer.setAnimationLoop(time=>{
     // Render capped at 40fps outside XR; pause animation work while the tab is hidden.
     if(document.hidden&&!renderer.xr.isPresenting)return;
     if(!renderer.xr.isPresenting && time-frameTime<25)return;frameTime=time;
     const dt=Math.min((time-lastTime)/1000,.05);lastTime=time;
+    teacherTime+=dt;
+    if(hovered&&!moving&&teacherTime-hoverStarted>.65&&teacherTime-lastLook>7){
+      teacher.react('look',pointerX*2);lastLook=teacherTime;hoverStarted=Infinity;
+    }
+    teacher.update(dt,{reducedMotion:reduceMotion.matches,xr:renderer.xr.isPresenting});
     if(!reduceMotion.matches&&!renderer.xr.isPresenting)skyTime.value+=dt;
     for(const layer of ribbonLayers){layer.mesh.position.y=Math.sin(skyTime.value*.06+layer.phase)*.65;layer.mesh.material.opacity=layer.opacity*(.95+.05*Math.sin(skyTime.value*.09+layer.phase));}
     glints.forEach((glint,i)=>{glint.material.opacity=.49+.10*Math.sin(skyTime.value*.42+i*2);});
@@ -355,6 +353,6 @@ export function createSpace(container, onState=()=>{}) {
     onState('xr-start');
   }
   onState('ready');
-  loadProvidedTeacher();
-  return {setMode,setBoard,resize,immersiveSupported,enterImmersive,async endImmersive(){if(session)await session.end();}};
+  teacher.load();
+  return {setMode,setBoard,resize,greetTeacher:()=>teacher.react('tap'),immersiveSupported,enterImmersive,async endImmersive(){if(session)await session.end();}};
 }
