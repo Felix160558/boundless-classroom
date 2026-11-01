@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#07090e">
+  <meta name="description" content="Boundless Classroom · Space Version. A quiet place to learn, beyond boundaries. Love, Share and Peace.">
+  <title>Boundless Classroom · Space Version</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23080c12'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-size='46' fill='%23f3f0e8'%3E∞%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="modulepreload" href="./three.module.min.js">
+  <script type="module" src="./app.js"></script>
+</head>
+<body data-mode="home">
+  <div class="cosmos-fallback" aria-hidden="true"><div class="fallback-platform"></div></div>
+  <div id="universe" role="img" aria-label="漂浮在深空中的三维教室，内有白板、课桌、椅子和金色猫老师"></div>
+  <div class="grain" aria-hidden="true"></div>
+  <header class="site-header">
+    <div class="wordmark"><span class="brand-mark" aria-hidden="true">∞</span><span>BOUNDLESS<span class="brand-sub">CLASSROOM</span></span></div>
+    <div class="header-actions">
+      <button class="back-button" id="back-home" hidden><span aria-hidden="true">←</span> 返回太空</button>
+      <button class="vr-entry" id="enter-vr"><span class="vr-glyph" aria-hidden="true"></span> Enter the VR <span aria-hidden="true">↗</span></button>
+      <button class="vr-entry" id="immersive-btn" hidden>全屏预览 <span aria-hidden="true">⤢</span></button>
+    </div>
+  </header>
+
+  <main>
+    <section class="home" id="home-view" aria-label="未来学习入口">
+      <div class="home-heading">
+        <p class="eyebrow"><span class="tiny-orbit" aria-hidden="true"></span> ROOM 001 <span class="eyebrow-divider">/</span> SPACE VERSION</p>
+        <h1>Beyond boundaries.</h1>
+        <p class="home-subtitle">让好奇心，去更远的地方。</p>
+      </div>
+      <div class="entry-anchor match-anchor">
+        <p class="entry-index">01 <span>LEARN IN THE MOMENT</span></p>
+        <button class="entry-button" id="open-match"><span>Match</span><span class="entry-icon" aria-hidden="true">↗</span></button>
+        <p class="entry-caption">遇见猫老师</p><div class="entry-line" aria-hidden="true"></div>
+      </div>
+      <div class="entry-anchor reservation-anchor">
+        <p class="entry-index">02 <span>MAKE TIME FOR CURIOSITY</span></p>
+        <button class="entry-button" id="open-book"><span>Reservation</span><span class="entry-icon" aria-hidden="true">↗</span></button>
+        <p class="entry-caption">为一次学习，留出时间</p><div class="entry-line" aria-hidden="true"></div>
+      </div>
+      <div class="stage-coordinate" aria-hidden="true"><i></i> THE FIRST CLASSROOM <span>001</span></div>
+      <div class="home-footer"><span class="edition"><i></i> AN OPEN LEARNING EXPERIMENT</span><span>Love, Share and Peace.</span><span class="footer-right">FREE TO LEARN. FREE TO SHARE.</span></div>
+    </section>
+
+    <section class="classroom-view" id="classroom-view" hidden aria-label="猫老师教室">
+      <div class="room-caption"><p class="eyebrow">BOUNDLESS / ROOM 001</p><h2>每个问题，都是一个开始。</h2><p>猫小将 <span>·</span> CAT TEACHER</p></div>
+      <aside class="chat-panel" aria-labelledby="chat-title">
+        <div class="chat-header"><div class="teacher-avatar" aria-hidden="true">🐱</div><div><h2 id="chat-title">猫老师</h2><p>好奇心，永远被欢迎。</p></div><span class="demo-pill">离线演示</span></div>
+        <div class="subject-tabs" role="group" aria-label="试学主题">
+          <button data-topic="free" class="subject-button active" aria-pressed="true">自由提问</button>
+          <button data-topic="chem" class="subject-button" aria-pressed="false">化学</button>
+          <button data-topic="english" class="subject-button" aria-pressed="false">英语</button>
+          <button data-topic="math" class="subject-button" aria-pressed="false">数学</button>
+        </div>
+        <div class="messages" id="messages" role="log" aria-label="课堂对话" aria-live="polite"><div class="message"><small>猫老师 · 离线示例</small><div class="bubble">你好呀，我是猫小将。🐾
+宇宙很大，我们从一个小问题开始。
+选个主题，或者问我一句吧。</div></div></div>
+        <form id="chat-form" class="compose">
+          <div><input id="chat-input" aria-label="向猫老师提问" placeholder="今天想弄明白什么？" maxlength="280" autocomplete="off" required><button type="submit" class="send" aria-label="发送消息">↑</button></div>
+          <div class="compose-footer"><p>预设教学脚本 · 尚未接入大模型</p><button id="voice-btn" type="button" aria-pressed="false">朗读：关</button></div>
+        </form>
+      </aside>
+    </section>
+
+    <section class="vr-view" id="vr-view" hidden aria-label="太空教室空间预览">
+      <div class="vr-heading"><p class="eyebrow">ROOM 001 / SPATIAL CONCEPT</p><h1>Somewhere,<br>we can wonder.</h1><p>一间教室。整个宇宙。</p></div>
+      <div class="vr-bottom"><span class="view-hint">拖动环视 <span>·</span> 滚轮靠近 <span>·</span> 双指缩放</span><p id="xr-status" role="status">桌面 3D 概念预览 · 非多人课堂</p></div>
+    </section>
+  </main>
+
+  <div class="loading-state" id="scene-loading" role="status"><span></span> 正在点亮第一间教室</div>
+  <p class="fallback-note" id="fallback-note" hidden>当前设备无法显示 3D，教学和预约演示仍可使用。</p>
+
+  <dialog id="book-dialog" aria-labelledby="book-title">
+    <div class="dialog-top"><span class="eyebrow">02 / RESERVATION</span><button class="close-button" data-close aria-label="关闭预约">×</button></div>
+    <div class="booking-intro"><p class="dialog-step">A LITTLE TIME, A NEW POSSIBILITY.</p><h2 id="book-title">为好奇心，<br>留一个位置。</h2><p>选择想学的内容，和一个适合你的时间。</p></div>
+    <form id="book-form">
+      <label class="field"><span>想一起探索什么？</span><input id="book-topic" required maxlength="70" placeholder="例如：从粒子运动理解化学"></label>
+      <label class="field"><span>老师</span><select id="book-teacher"><option value="cat">猫老师 · 教学演示</option><option value="human" disabled>真人老师 · 未来开放</option></select></label>
+      <div class="field-row"><label class="field"><span>日期</span><input type="date" id="book-date" required></label><label class="field"><span>时间 <small id="booking-timezone">本地时间</small></span><input type="time" id="book-time" value="19:00" required></label></div>
+      <div class="booking-notice" id="book-notice" role="status">仅保存在本浏览器，不代表真实预约，也不会通知老师。无押金，无强制赔偿。</div>
+      <div class="booking-actions"><button type="button" id="clear-booking" class="text-button" hidden>清除本地示意</button><button type="submit" class="solid-button">保存预约示意 <span aria-hidden="true">↗</span></button></div>
+    </form>
+  </dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <noscript><div class="noscript-note">这是可公开访问的静态 Demo。请启用 JavaScript，以体验三维教室、离线教学与本地预约。</div></noscript>
+</body>
+</html>
