@@ -21,6 +21,9 @@ export function createSpace(container, onState=()=>{}) {
   renderer.domElement.setAttribute('aria-hidden','true');
   const camera=new THREE.PerspectiveCamera(42,1,.1,600);
   const rig=new THREE.Group();rig.add(camera);scene.add(rig);
+  const seatPosition=new THREE.Vector3(.8,1.38,2.06);
+  const seatDirection=new THREE.Vector3(),xrHeadPosition=new THREE.Vector3(),xrForward=new THREE.Vector3();
+  let seatBaseYaw=-.245,seatYaw=-.245,seatPitch=.065,desiredSeatYaw=-.245,desiredSeatPitch=.065,xrSeatPending=false;
   const room=new THREE.Group();scene.add(room);
   let mode='home',zoom=1,dragX=0,dragY=0,pointerX=0,pointerY=0;
   let moving=false,lastX=0,lastY=0,lastTime=0,frameTime=0,session=null;
@@ -64,10 +67,21 @@ export function createSpace(container, onState=()=>{}) {
   ring(6.65,-.46,0xb4c7df,.14);
   ring(7.5,-.9,0x9cabc0,.045);
   const floor=box(9.2,.13,6.9,materials.deck,0,.025,0);
-  // Very faint glazing catches the frame light while keeping the classroom visually open.
-  const glass=new THREE.MeshPhysicalMaterial({color:0xaab8ca,transparent:true,opacity:.028,roughness:.12,metalness:.08,side:THREE.DoubleSide,depthWrite:false});
-  const backGlass=mesh(new THREE.PlaneGeometry(8.9,3.7),glass,room,0,1.95,-3.3);backGlass.castShadow=false;
-  const sideGlass=mesh(new THREE.PlaneGeometry(6.6,3.7),glass,room,-4.45,1.95,0);sideGlass.rotation.y=Math.PI/2;sideGlass.castShadow=false;
+  // A complete, quiet glass enclosure. The existing cosmos remains visible
+  // through all panes; no opaque room backdrop or new environment is loaded.
+  const glass=new THREE.MeshPhysicalMaterial({color:0xc4d2e1,transparent:true,opacity:.045,roughness:.08,metalness:.08,clearcoat:1,clearcoatRoughness:.08,side:THREE.DoubleSide,depthWrite:false});
+  const glassEdges=new THREE.LineBasicMaterial({color:0xb8c8d8,transparent:true,opacity:.16,depthWrite:false});
+  function pane(width,height,x,y,z,rx=0,ry=0){
+    const geometry=new THREE.PlaneGeometry(width,height),window=mesh(geometry,glass,room,x,y,z);
+    window.rotation.set(rx,ry,0);window.castShadow=false;window.receiveShadow=false;
+    const border=new THREE.LineSegments(new THREE.EdgesGeometry(geometry),glassEdges);
+    window.add(border);return window;
+  }
+  pane(8.9,3.76,0,1.98,-3.3);
+  pane(8.9,3.76,0,1.98,3.3);
+  pane(6.6,3.76,-4.45,1.98,0,0,Math.PI/2);
+  pane(6.6,3.76,4.45,1.98,0,0,Math.PI/2);
+  pane(8.9,6.6,0,3.86,0,Math.PI/2);
   // Restrained panels and a fine architectural frame.
   const seamMat=new THREE.LineBasicMaterial({color:0x4a515a,transparent:true,opacity:.18});
   for(let i=-3;i<=3;i++){
@@ -102,7 +116,13 @@ export function createSpace(container, onState=()=>{}) {
   drawBoard();
   // One desk, one chair. No additional dashboard or classroom clutter.
   const table=new THREE.Group();table.position.set(.8,0,1.1);room.add(table);
-  box(1.85,.09,.91,new THREE.MeshStandardMaterial({color:0xc9c9b7,roughness:.58}),0,.94,0,table);
+  const desktopShape=new THREE.Shape(),w=.925,d=.455,r=.055;
+  desktopShape.moveTo(-w+r,-d);desktopShape.lineTo(w-r,-d);desktopShape.quadraticCurveTo(w,-d,w,-d+r);
+  desktopShape.lineTo(w,d-r);desktopShape.quadraticCurveTo(w,d,w-r,d);desktopShape.lineTo(-w+r,d);
+  desktopShape.quadraticCurveTo(-w,d,-w,d-r);desktopShape.lineTo(-w,-d+r);desktopShape.quadraticCurveTo(-w,-d,-w+r,-d);
+  const desktopGeometry=new THREE.ExtrudeGeometry(desktopShape,{depth:.065,bevelEnabled:true,bevelSize:.012,bevelThickness:.01,bevelSegments:3,steps:1,curveSegments:10});
+  desktopGeometry.rotateX(-Math.PI/2);desktopGeometry.translate(0,.91,0);
+  mesh(desktopGeometry,new THREE.MeshPhysicalMaterial({color:0xc9c9b7,roughness:.43,clearcoat:.25,clearcoatRoughness:.32}),table);
   for(const x of [-.76,.76])for(const z of [-.32,.32])box(.04,.82,.04,materials.edge,x,.49,z,table);
   const chair=new THREE.Group();chair.position.set(.8,0,2.06);room.add(chair);
   box(.62,.09,.62,materials.dark,0,.58,0,chair);
@@ -114,11 +134,18 @@ export function createSpace(container, onState=()=>{}) {
     const ctx=canvas.getContext('2d');ctx.fillStyle='#536172';ctx.textAlign='center';ctx.font='24px Arial';ctx.fillText(text,256,76);
     const map=new THREE.CanvasTexture(canvas);map.colorSpace=THREE.SRGBColorSpace;
     const p=mesh(new THREE.PlaneGeometry(1.65,.41),new THREE.MeshBasicMaterial({map,transparent:true,depthWrite:false}),room,x,.104,z);
-    p.rotation.x=-Math.PI/2;p.castShadow=false;
+    p.rotation.x=-Math.PI/2;p.castShadow=false;return p;
   }
-  floorLabel('TEACHER',-2.6,.9);floorLabel('LEARNER',.8,2.8);
+  const teacherMarker=floorLabel('TEACHER',-2.6,.9);floorLabel('LEARNER',.8,2.8);
 
-  const teacher=createCatTeacher(onState);room.add(teacher.group);
+  const teacher=createCatTeacher(onState),teacherSpot=new THREE.Group();
+  teacherSpot.position.set(-2.55,0,.35);room.add(teacherSpot);
+  teacher.group.position.x=0;teacher.group.position.z=0;teacherSpot.add(teacher.group);
+  function placeTeacher(seated){
+    teacherSpot.position.set(seated?-2.2:-2.55,0,seated?-1.65:.35);
+    teacherSpot.rotation.y=seated?Math.atan2(seatPosition.x-teacherSpot.position.x,seatPosition.z-teacherSpot.position.z)-.25:0;
+    teacherMarker.position.set(seated?-2.2:-2.6,.104,seated?-1.05:.9);
+  }
 
   // A volumetric particle ribbon: every point has real depth, never a flat galaxy card.
   // No solid planets or solar-system orbit decorations.
@@ -255,24 +282,33 @@ export function createSpace(container, onState=()=>{}) {
   }
   scene.add(particleField(near,1));
 
+  function seatLook(yaw,pitch,out){
+    return out.set(Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch)).add(seatPosition);
+  }
   function pose(){
     const portrait=container.clientWidth<650;
+    const fov=mode==='vr'?(portrait?78:66):42;
+    if(!renderer.xr.isPresenting&&camera.fov!==fov){camera.fov=fov;camera.updateProjectionMatrix();}
+    if(mode==='vr'){
+      desiredPosition.copy(seatPosition);
+      desiredSeatYaw=seatBaseYaw+dragX;desiredSeatPitch=THREE.MathUtils.clamp(.065+dragY,-1.25,1.25);
+      seatLook(desiredSeatYaw,desiredSeatPitch,desiredTarget);return;
+    }
     const portraitFit=portrait?Math.max(1,.67/camera.aspect):1;
     if(mode==='home'){
       desiredPosition.set(portrait?15:12,portrait?12.2:9.2,portrait?22:18).multiplyScalar(zoom*portraitFit);
       desiredTarget.set(0,portrait?1.7:2.65,0);
-    } else if(mode==='classroom'){
+    }else{
       desiredPosition.set(8.1,5.7,12.3).multiplyScalar(zoom);desiredTarget.set(0,1.35,0);
-    } else {
-      desiredPosition.set(portrait?15:10.5,portrait?9:5.5,portrait?22:14.5).multiplyScalar(zoom*portraitFit);
-      desiredTarget.set(-.6,1.6,0);
     }
-    desiredPosition.applyAxisAngle(new THREE.Vector3(0,1,0),dragX);
-    desiredPosition.y+=dragY;
+    desiredPosition.applyAxisAngle(new THREE.Vector3(0,1,0),dragX);desiredPosition.y+=dragY;
+  }
+  function snapView(){
+    camera.position.copy(desiredPosition);target.copy(desiredTarget);
+    seatYaw=desiredSeatYaw;seatPitch=desiredSeatPitch;camera.lookAt(target);
   }
   function resize(){const w=container.clientWidth,h=container.clientHeight;renderer.setSize(w,h);pointScale.value=h*renderer.getPixelRatio()*.5;camera.aspect=w/h;camera.updateProjectionMatrix();pose();}
-  const observer=new ResizeObserver(resize);observer.observe(container);resize();
-  camera.position.copy(desiredPosition);target.copy(desiredTarget);camera.lookAt(target);
+  const observer=new ResizeObserver(resize);observer.observe(container);resize();snapView();
 
   let previousPinch=0,tapCandidate=null,hovered=false,hoverStarted=0,lastLook=-10,teacherTime=0;
   const touches=new Map(),teacherRay=new THREE.Raycaster(),pointerNdc=new THREE.Vector2();
@@ -301,17 +337,22 @@ export function createSpace(container, onState=()=>{}) {
     if(touches.has(e.pointerId))touches.set(e.pointerId,{x:e.clientX,y:e.clientY});
     if(touches.size===2){
       const p=[...touches.values()],distance=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y);
-      if(previousPinch>0)zoom=THREE.MathUtils.clamp(zoom*previousPinch/Math.max(1,distance),.6,1.65);previousPinch=distance;
+      if(mode!=='vr'&&previousPinch>0)zoom=THREE.MathUtils.clamp(zoom*previousPinch/Math.max(1,distance),.6,1.65);previousPinch=distance;
+    }else if(mode==='vr'){
+      const yaw=dragX-(e.clientX-lastX)*.003;
+      dragX=Math.atan2(Math.sin(yaw),Math.cos(yaw));
+      dragY=THREE.MathUtils.clamp(dragY+(e.clientY-lastY)*.003,-1.315,1.185);
     }else{dragX=THREE.MathUtils.clamp(dragX-(e.clientX-lastX)*.003,-1.05,1.05);dragY=THREE.MathUtils.clamp(dragY+(e.clientY-lastY)*.008,-2,5);}
     lastX=e.clientX;lastY=e.clientY;pose();
   }
   function pointerUp(e){
     const tap=e.type==='pointerup'&&tapCandidate?.id===e.pointerId&&!tapCandidate.cancelled&&touches.size===1;
     touches.delete(e.pointerId);moving=touches.size>0;previousPinch=0;tapCandidate=null;
+    if(moving){const remaining=touches.values().next().value;lastX=remaining.x;lastY=remaining.y;}
     if(tap&&hitsTeacher(e,true))teacher.react('tap');
     canvas.style.cursor='grab';
   }
-  function wheel(e){if(mode==='home')return;e.preventDefault();zoom=THREE.MathUtils.clamp(zoom+e.deltaY*.0005,.6,1.65);pose();}
+  function wheel(e){if(mode==='home')return;e.preventDefault();if(mode==='vr')return;zoom=THREE.MathUtils.clamp(zoom+e.deltaY*.0005,.6,1.65);pose();}
   canvas.style.cursor='grab';canvas.addEventListener('pointerdown',pointerDown);canvas.addEventListener('pointermove',pointerMove);
   canvas.addEventListener('pointerleave',()=>{hovered=false;});
   canvas.addEventListener('pointerup',pointerUp);canvas.addEventListener('pointercancel',pointerUp);
@@ -319,13 +360,40 @@ export function createSpace(container, onState=()=>{}) {
   canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();onState('lost');});
   canvas.addEventListener('webglcontextrestored',()=>onState('restored'));
 
-  function setMode(next){teacher.setClassroomMode(next==='classroom');mode=next;zoom=1;dragX=dragY=0;pose();}
+  container.addEventListener('keydown',e=>{
+    if(mode!=='vr'||renderer.xr.isPresenting||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))return;
+    e.preventDefault();
+    if(e.key==='ArrowLeft')dragX-=.075;if(e.key==='ArrowRight')dragX+=.075;
+    if(e.key==='ArrowUp')dragY+=.065;if(e.key==='ArrowDown')dragY-=.065;
+    dragX=Math.atan2(Math.sin(dragX),Math.cos(dragX));dragY=THREE.MathUtils.clamp(dragY,-1.315,1.185);pose();
+  });
+  function setMode(next){
+    if(next===mode){pose();return;}
+    const wasSeated=mode==='vr';mode=next;zoom=1;dragX=dragY=0;
+    if(mode==='vr'){seatBaseYaw=container.clientWidth<650?-.45:-.245;room.position.y=0;}
+    placeTeacher(mode==='vr');teacher.setClassroomMode(mode==='classroom'||mode==='vr');
+    container.tabIndex=mode==='vr'?0:-1;container.setAttribute('role',mode==='vr'?'region':'img');
+    pose();
+    // Enter/leave directly at the seat, never fly through the desk or glass.
+    if(wasSeated||mode==='vr')snapView();
+  }
   function setBoard(title,subtitle){boardTitle=title;boardSubtitle=subtitle;drawBoard();}
-  renderer.setAnimationLoop(time=>{
+  renderer.setAnimationLoop((time,xrFrame)=>{
     // Render capped at 40fps outside XR; pause animation work while the tab is hidden.
     if(document.hidden&&!renderer.xr.isPresenting)return;
     if(!renderer.xr.isPresenting && time-frameTime<25)return;frameTime=time;
     const dt=Math.min((time-lastTime)/1000,.05);lastTime=time;
+    if(renderer.xr.isPresenting&&xrSeatPending&&xrFrame){
+      const viewer=xrFrame.getViewerPose(renderer.xr.getReferenceSpace());
+      if(viewer){
+        const orientation=viewer.transform.orientation,position=viewer.transform.position;
+        xrForward.set(0,0,-1).applyQuaternion(new THREE.Quaternion(orientation.x,orientation.y,orientation.z,orientation.w));
+        const heading=Math.atan2(xrForward.x,-xrForward.z);
+        rig.rotation.set(0,heading+.245,0);
+        xrHeadPosition.set(position.x,position.y,position.z).applyQuaternion(rig.quaternion);
+        rig.position.copy(seatPosition).sub(xrHeadPosition);rig.updateMatrixWorld(true);xrSeatPending=false;
+      }
+    }
     teacherTime+=dt;
     if(hovered&&!moving&&teacherTime-hoverStarted>.65&&teacherTime-lastLook>7){
       teacher.react('look',pointerX*2);lastLook=teacherTime;hoverStarted=Infinity;
@@ -335,21 +403,33 @@ export function createSpace(container, onState=()=>{}) {
     for(const layer of ribbonLayers){layer.mesh.position.y=Math.sin(skyTime.value*.06+layer.phase)*.65;layer.mesh.material.opacity=layer.opacity*(.95+.05*Math.sin(skyTime.value*.09+layer.phase));}
     glints.forEach((glint,i)=>{glint.material.opacity=.49+.10*Math.sin(skyTime.value*.42+i*2);});
     if(!renderer.xr.isPresenting){
-      const smoothing=reduceMotion.matches?1:1-Math.exp(-dt*4);
-      camera.position.lerp(desiredPosition,smoothing);target.lerp(desiredTarget,smoothing);
-      const look=target.clone();if(!reduceMotion.matches&&!moving){look.x+=pointerX*.18;look.y-=pointerY*.12;}camera.lookAt(look);
-      room.position.y=reduceMotion.matches?0:Math.sin(time*.00035)*.045;
-    } else room.position.y=0;
+      const smoothing=reduceMotion.matches?1:1-Math.exp(-dt*(mode==='vr'?9:4));
+      if(mode==='vr'){
+        seatYaw+=Math.atan2(Math.sin(desiredSeatYaw-seatYaw),Math.cos(desiredSeatYaw-seatYaw))*smoothing;
+        seatPitch=THREE.MathUtils.lerp(seatPitch,desiredSeatPitch,smoothing);
+        camera.position.copy(seatPosition);camera.lookAt(seatLook(seatYaw,seatPitch,seatDirection));
+        room.position.y=0;
+      }else{
+        camera.position.lerp(desiredPosition,smoothing);target.lerp(desiredTarget,smoothing);
+        const look=target.clone();if(!reduceMotion.matches&&!moving){look.x+=pointerX*.18;look.y-=pointerY*.12;}camera.lookAt(look);
+        room.position.y=reduceMotion.matches?0:Math.sin(time*.00035)*.045;
+      }
+    }else room.position.y=0;
     renderer.render(scene,camera);
   });
   async function immersiveSupported(){if(!isSecureContext||!navigator.xr)return false;try{return await navigator.xr.isSessionSupported('immersive-vr');}catch{return false;}}
   async function enterImmersive(){
     if(!(await immersiveSupported()))throw new Error('此浏览器或设备不支持沉浸式头显。');
-    session=await navigator.xr.requestSession('immersive-vr',{requiredFeatures:['local-floor']});
-    renderer.xr.setReferenceSpaceType('local-floor');
-    rig.position.set(.8,0,2.5);camera.position.set(0,1.6,0);camera.rotation.set(0,0,0);
-    try{await renderer.xr.setSession(session);}catch(error){await session.end();session=null;rig.position.set(0,0,0);pose();throw error;}
-    session.addEventListener('end',()=>{session=null;rig.position.set(0,0,0);pose();onState('xr-end');},{once:true});
+    const active=await navigator.xr.requestSession('immersive-vr',{requiredFeatures:['local-floor']});session=active;
+    renderer.xr.setReferenceSpaceType('local-floor');xrSeatPending=true;
+    // The first tracked frame aligns the seat; keep the desktop camera still while XR starts.
+    function restoreSeat(){
+      xrSeatPending=false;rig.position.set(0,0,0);rig.rotation.set(0,0,0);pose();
+      camera.fov=mode==='vr'?(container.clientWidth<650?78:66):42;camera.updateProjectionMatrix();snapView();
+    }
+    active.addEventListener('end',()=>{if(session!==active)return;session=null;restoreSeat();onState('xr-end');},{once:true});
+    try{await renderer.xr.setSession(active);}catch(error){await active.end();session=null;restoreSeat();throw error;}
+    if(session!==active)return;
     onState('xr-start');
   }
   onState('ready');

@@ -7,11 +7,11 @@
   <meta name="description" content="Boundless Classroom · Space Version. A quiet place to learn, beyond boundaries. Love, Share and Peace.">
   <title>Boundless Classroom · Space Version</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23080c12'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-size='46' fill='%23f3f0e8'%3E∞%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="./styles.css?v=fluid-cat-6">
+  <link rel="stylesheet" href="./styles.css?v=seated-vr-7">
   <link rel="preload" as="fetch" href="./cat-teacher.glb?v=fluid-cat-6" crossorigin="anonymous" fetchpriority="high">
   <link rel="modulepreload" href="./three.module.min.js">
   <link rel="modulepreload" href="./meshopt_decoder.mjs">
-  <script type="module" src="./app.js?v=fluid-cat-6"></script>
+  <script type="module" src="./app.js?v=seated-vr-7"></script>
 </head>
 <body data-mode="home">
   <div class="cosmos-fallback" aria-hidden="true"><div class="fallback-platform"></div></div>
@@ -22,7 +22,7 @@
     <div class="header-actions">
       <button class="back-button" id="back-home" hidden><span aria-hidden="true">←</span> 返回太空</button>
       <button class="vr-entry" id="enter-vr"><span class="vr-glyph" aria-hidden="true"></span> Enter the VR <span aria-hidden="true">↗</span></button>
-      <button class="vr-entry" id="immersive-btn" hidden>全屏预览 <span aria-hidden="true">⤢</span></button>
+      <button class="vr-entry" id="immersive-btn" hidden>全屏 <span aria-hidden="true">⤢</span></button>
     </div>
   </header>
 
@@ -67,9 +67,10 @@
       </aside>
     </section>
 
-    <section class="vr-view" id="vr-view" hidden aria-label="太空教室空间预览">
-      <div class="vr-heading"><p class="eyebrow">ROOM 001 / SPATIAL CONCEPT</p><h1>Somewhere,<br>we can wonder.</h1><p>一间教室。整个宇宙。</p></div>
-      <div class="vr-bottom"><span class="view-hint">拖动环视 <span>·</span> 滚轮靠近 <span>·</span> 双指缩放</span><p id="xr-status" role="status">桌面 3D 概念预览 · 非多人课堂</p></div>
+    <section class="vr-view" id="vr-view" hidden aria-label="坐在课桌前的沉浸式教室">
+      <div class="vr-seat-caption"><span>ROOM 001</span><span>一席之间，整个宇宙。</span></div>
+      <p class="vr-seat-hint">你已坐在课桌前 <span>·</span> 拖动或方向键环视</p>
+      <p id="xr-status" class="sr-only" role="status">课桌座位视角，拖动或方向键环视。</p>
     </section>
   </main>
 

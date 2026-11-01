@@ -3,6 +3,7 @@ import {topics,respond} from './tutor.js';
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 let space=null,topic='free',pending=false,voice=false,currentMode='home',xrSupported=false;
 let toastTimer=null;
+const defaultSceneDescription=$('#universe').getAttribute('aria-label');
 function toast(message){const el=$('#toast');el.textContent=message;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),4000);}
 function updateMode(){
   const next=location.hash.slice(1);
@@ -15,10 +16,13 @@ function updateMode(){
   $('#enter-vr').hidden=currentMode==='vr';
   $('#immersive-btn').hidden=currentMode!=='vr';
   space?.setMode(currentMode);
+  $('#universe').setAttribute('aria-label',currentMode==='vr'?'你坐在课桌前，面前是猫老师与白板，左右和头顶是通向星空的玻璃。拖动或使用方向键环视。':defaultSceneDescription);
+  $('#back-home').lastChild.textContent=currentMode==='vr'?' 离开教室':' 返回太空';
   if(currentMode==='vr')space?.setBoard('Stay curious.','The universe is your classroom.');
   else if(currentMode==='classroom')space?.setBoard(topics[topic].title,topics[topic].sub);
   else space?.setBoard('Stay curious.','Every question is a beginning.');
   if(currentMode==='classroom')$('#chat-input').focus({preventScroll:true});
+  else if(currentMode==='vr')$('#universe').focus({preventScroll:true});
   else if(currentMode==='home'&&next)$('#open-match').focus({preventScroll:true});
 }
 function navigate(mode){if(currentMode===mode)return;location.hash=mode==='home'?'home':mode;}
@@ -116,7 +120,7 @@ $('#immersive-btn').addEventListener('click',async()=>{
     else toast('此浏览器不支持全屏，可直接拖动体验空间。');
   }catch{toast('此浏览器暂时无法进入全屏。');}
 });
-document.addEventListener('fullscreenchange',()=>{if(!xrSupported)$('#immersive-btn').innerHTML=document.fullscreenElement?'退出全屏 ⤢':'全屏预览 ⤢';});
+document.addEventListener('fullscreenchange',()=>{if(!xrSupported)$('#immersive-btn').innerHTML=document.fullscreenElement?'退出全屏 ⤢':'全屏 ⤢';});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&'speechSynthesis'in window)speechSynthesis.cancel();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!dialog.open&&currentMode!=='home'&&!document.fullscreenElement)navigate('home');});
 
@@ -124,7 +128,7 @@ function fallback(message){
   document.body.classList.add('fallback');$('#scene-loading').hidden=true;$('#fallback-note').hidden=false;
   if(message)$('#fallback-note').textContent=message;
 }
-import('./space-scene.js?v=fluid-cat-6').then(async({createSpace})=>{
+import('./space-scene.js?v=seated-vr-7').then(async({createSpace})=>{
   space=createSpace($('#universe'),(state,detail)=>{
     if(state==='ready')$('#scene-loading').hidden=true;
     if(state==='teacher-loading'){
@@ -137,9 +141,9 @@ import('./space-scene.js?v=fluid-cat-6').then(async({createSpace})=>{
     }
     if(state==='lost')fallback('3D 画面暂时中断。请刷新恢复，教学与预约演示仍可使用。');
     if(state==='restored'){document.body.classList.remove('fallback');$('#fallback-note').hidden=true;}
-    if(state==='xr-start'){$('#xr-status').textContent='单人头显概念场景 · 非多人课堂';}
-    if(state==='xr-end'){$('#xr-status').textContent='桌面 3D 概念预览 · 非多人课堂';}
+    if(state==='xr-start'){$('#xr-status').textContent='单人头显空间，已在课桌座位处定位。';}
+    if(state==='xr-end'){$('#xr-status').textContent='课桌座位视角，拖动或方向键环视。';}
   });
   updateMode();xrSupported=await space.immersiveSupported();
-  if(xrSupported){$('#immersive-btn').textContent='进入头显 ↗';$('#xr-status').textContent='桌面 3D 预览 · 检测到可用 WebXR 设备';}
+  if(xrSupported){$('#immersive-btn').textContent='进入头显 ↗';$('#xr-status').textContent='课桌座位视角，设备支持实验性单人头显入口。';}
 }).catch(()=>fallback());

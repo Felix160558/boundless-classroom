@@ -8,8 +8,8 @@ A quiet classroom floating in space. A public, static learning demo built with H
 
 - **Match** opens the cat teacher's classroom directly. No real-person matching.
 - **Reservation** saves a demo booking in the current browser. No teacher is notified.
-- **Enter the VR** opens a navigable 3D classroom concept, with a whiteboard, one desk, one chair, a cat teacher and teacher/learner floor markers.
-- On a compatible HTTPS/WebXR device, an experimental single-user headset entry is offered. Actual headset compatibility has not been verified.
+- **Enter the VR** places you directly in the student chair, looking past your desk toward the cat teacher and whiteboard. Glass walls on both sides and a glass ceiling open onto the existing stardust universe. Drag, swipe or use arrow keys to look around from the fixed seat; there is no extra sit-down button or movement panel.
+- On a compatible HTTPS/WebXR device, an experimental single-user headset entry is offered. Its first tracked frame is aligned to the same seat, and subsequent physical head motion remains tracked. Actual headset compatibility has not been verified.
 
 The teacher uses the original supplied 3D character. This version restores the original geometry detail and exact 4096px source JPEG texture, with no mesh simplification, texture resizing or vertex quantization. The asset is 19.64 MB: visual detail and future close-up viewing take priority over a tiny first download. Local Meshopt compression remains lossless for the stored geometry. The model starts preloading when the page opens; a browser-local model cache is used when available.
 
