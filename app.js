@@ -128,7 +128,7 @@ function fallback(message){
   document.body.classList.add('fallback');$('#scene-loading').hidden=true;$('#fallback-note').hidden=false;
   if(message)$('#fallback-note').textContent=message;
 }
-import('./space-scene.js?v=seated-vr-7').then(async({createSpace})=>{
+import('./space-scene.js?v=endless-galaxy-8').then(async({createSpace})=>{
   space=createSpace($('#universe'),(state,detail)=>{
     if(state==='ready')$('#scene-loading').hidden=true;
     if(state==='teacher-loading'){

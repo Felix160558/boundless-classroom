@@ -209,9 +209,10 @@ export function createSpace(container, onState=()=>{}) {
     pushParticle(distant,r*Math.sqrt(1-u*u)*Math.cos(a),u*180,r*Math.sqrt(1-u*u)*Math.sin(a),.40+random()*.90,.60+random()*.40,.57+random()*.4);
   }
   scene.add(particleField(distant,1));
-  // Continuous curved dust veils replace the previous broad, spotted fog particles.
+  // A closed panoramic ribbon carries the same soft dust through the whole sky.
+  // Its curved tails meet behind the classroom, without a visible start or finish.
   const nebula=new THREE.Group();nebula.position.set(-58,-35,-95);nebula.rotation.set(0,.59,-.30);scene.add(nebula);
-  const compact=container.clientWidth<650,ribbonLayers=[];
+  const compact=container.clientWidth<650,ribbonLayers=[],ribbonRadius=130;
   function noiseHash(x,y){let n=Math.imul(x,374761393)+Math.imul(y,668265263);n=Math.imul(n^(n>>>13),1274126177);return ((n^(n>>>16))>>>0)/4294967295;}
   function noise(x,y){
     const ix=Math.floor(x),iy=Math.floor(y),fx=x-ix,fy=y-iy;
@@ -223,14 +224,17 @@ export function createSpace(container, onState=()=>{}) {
     const c=document.createElement('canvas');c.width=1536;c.height=384;
     const ctx=c.getContext('2d'),pixels=ctx.createImageData(c.width,c.height),data=pixels.data;
     for(let y=0;y<c.height;y++)for(let x=0;x<c.width;x++){
-      const u=x/(c.width-1),v=y/(c.height-1)*2-1;
-      const flow=fbm(u*7.5+9,2.8+v*2.2),filament=fbm(u*28+3,v*10+11);
-      const bend=(flow-.46)*1.15+Math.sin(u*9.4)*.10;
+      const u=x/(c.width-1),v=y/(c.height-1)*2-1,angle=u*TAU;
+      // Sampling noise around a circle makes both texture edges agree in value
+      // and slope, so the longer band has no repeated-card seam or end fade.
+      const flow=fbm(Math.cos(angle)*2.4+v*.6+9,Math.sin(angle)*2.4+v*2.2+2.8);
+      const filament=fbm(Math.cos(angle)*8.9+v*3+3,Math.sin(angle)*8.9+v*10+11);
+      const bend=(flow-.46)*1.15+Math.sin(angle*2)*.10;
       const d=v-bend,width=.24+.18*flow;
       const core=Math.exp(-d*d/(width*width));
       const veil=Math.exp(-d*d/.22)*(.24+.62*filament);
       const folds=Math.pow(Math.max(.05,filament),1.4);
-      const edge=Math.pow(Math.sin(Math.PI*u),.30);
+      const edge=Math.pow(Math.max(0,1-v*v),1.25);
       const alpha=Math.min(1,(core*(.06+folds*1.9)+veil*.36)*edge);
       const i=(y*c.width+x)*4;
       data[i]=187+filament*32;data[i+1]=199+filament*29;data[i+2]=216+filament*23;data[i+3]=Math.round(alpha*220);
@@ -238,15 +242,19 @@ export function createSpace(container, onState=()=>{}) {
     ctx.putImageData(pixels,0,0);const map=new THREE.CanvasTexture(c);map.colorSpace=THREE.SRGBColorSpace;return map;
   }
   const veilMap=makeVeilTexture();
-  function spine(u){return Math.sin(u*4.1+.3)*10.5+Math.sin(u*8.2)*2.2;}
+  function spine(angle){return Math.sin(angle*3+.3)*10.5+Math.sin(angle*6)*2.2;}
+  function ribbonPosition(angle,height=0,depth=0){
+    const radius=ribbonRadius-depth;
+    return [Math.sin(angle)*radius,spine(angle)+height,ribbonRadius-Math.cos(angle)*radius+Math.sin(angle*2)*9];
+  }
   const layerSettings=[[-10,24,.11,-3.6],[-4,15,.19,1.5],[1,8,.25,0],[7,17,.16,3],[14,27,.10,-1.2]];
   for(let layer=0;layer<layerSettings.length;layer++){
     const [depth,width,opacity,offset]=layerSettings[layer],vertices=[],uvs=[],indices=[];
-    const nx=160,ny=18;
+    const nx=320,ny=18;
     for(let j=0;j<=ny;j++)for(let i=0;i<=nx;i++){
-      const u=i/nx*2-1,v=j/ny*2-1;
-      const breathing=1+.12*Math.sin(u*5+layer);
-      vertices.push(u*185,spine(u)+offset+Math.sin(u*10+layer*2)*(layer-2)*.65+v*width*breathing,Math.sin(u*2.5)*9+depth+v*v*3.5+Math.sin(u*6+layer)*1.4);
+      const angle=(i/nx-.5)*TAU,v=j/ny*2-1;
+      const breathing=1+.12*Math.sin(angle*4+layer);
+      vertices.push(...ribbonPosition(angle,offset+Math.sin(angle*7+layer*2)*(layer-2)*.65+v*width*breathing,depth+v*v*3.5+Math.sin(angle*4+layer)*1.4));
       uvs.push(i/nx,j/ny);
     }
     for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const k=j*(nx+1)+i;indices.push(k,k+1,k+nx+1,k+1,k+nx+2,k+nx+1);}
@@ -254,13 +262,13 @@ export function createSpace(container, onState=()=>{}) {
     const material=new THREE.MeshBasicMaterial({map:veilMap,transparent:true,opacity,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,toneMapped:false});
     const veil=new THREE.Mesh(geometry,material);veil.frustumCulled=false;nebula.add(veil);ribbonLayers.push({mesh:veil,opacity,phase:layer*.9});
   }
-  const dust=particleData(),count=compact?24000:42000;
+  // Roughly twice the former length; keep fine-grain density along the extension.
+  const dust=particleData(),count=compact?48000:84000;
   for(let i=0;i<count;i++){
-    const u=random()*2-1,x=u*185;
-    const spread=3.5+4.5*(.5+.5*Math.sin(u*4.8+1));
-    const y=spine(u)+gaussian()*spread,z=Math.sin(u*2.5)*9+gaussian()*8.5;
-    const edge=Math.pow(Math.max(0,1-u*u),.45),bright=random();
-    pushParticle(dust,x,y,z,.24+Math.pow(bright,5)*.85,(.18+random()*.28)*edge,.58+random()*.37);
+    const angle=(random()-.5)*TAU;
+    const spread=3.5+4.5*(.5+.5*Math.sin(angle*3+1));
+    const [x,y,z]=ribbonPosition(angle,gaussian()*spread,gaussian()*8.5),bright=random();
+    pushParticle(dust,x,y,z,.24+Math.pow(bright,5)*.85,.18+random()*.28,.58+random()*.37);
   }
   nebula.add(particleField(dust));
   // Occasional small glints provide a gentle focal rhythm, without any solid celestial bodies.
@@ -273,7 +281,7 @@ export function createSpace(container, onState=()=>{}) {
   const glintMap=glintTexture(),glints=[];
   for(const [x,scale] of [[-104,4.5],[72,6.2]]){
     const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:glintMap,transparent:true,depthWrite:false,opacity:.55,blending:THREE.AdditiveBlending}));
-    sprite.position.set(x,spine(x/185),Math.sin(x/185*2.5)*9+8);sprite.scale.set(scale,scale,scale);nebula.add(sprite);glints.push(sprite);
+    sprite.position.set(...ribbonPosition(x/ribbonRadius,0,8));sprite.scale.set(scale,scale,scale);nebula.add(sprite);glints.push(sprite);
   }
   const near=particleData();
   for(let i=0;i<150;i++){
