@@ -125,9 +125,30 @@ export function createSpace(container, onState=()=>{}) {
   mesh(desktopGeometry,new THREE.MeshPhysicalMaterial({color:0xc9c9b7,roughness:.43,clearcoat:.25,clearcoatRoughness:.32}),table);
   for(const x of [-.76,.76])for(const z of [-.32,.32])box(.04,.82,.04,materials.edge,x,.49,z,table);
   const chair=new THREE.Group();chair.position.set(.8,0,2.06);room.add(chair);
-  box(.62,.09,.62,materials.dark,0,.58,0,chair);
-  box(.61,.62,.065,materials.white,0,.95,.29,chair);
-  for(const x of [-.25,.25])for(const z of [-.24,.24])box(.035,.48,.035,materials.edge,x,.31,z,chair);
+  // True circular corners and rolled edges, including the panel thickness.
+  // Keep the existing seat height and first-person eye position.
+  function roundedChairPanel(width,height,thickness,radius,bevel){
+    const shape=new THREE.Shape(),w=width/2-bevel,h=height/2-bevel,r=radius-bevel;
+    shape.moveTo(-w+r,-h);shape.lineTo(w-r,-h);
+    shape.absarc(w-r,-h+r,r,-Math.PI/2,0,false);
+    shape.lineTo(w,h-r);shape.absarc(w-r,h-r,r,0,Math.PI/2,false);
+    shape.lineTo(-w+r,h);shape.absarc(-w+r,h-r,r,Math.PI/2,Math.PI,false);
+    shape.lineTo(-w,-h+r);shape.absarc(-w+r,-h+r,r,Math.PI,Math.PI*1.5,false);shape.closePath();
+    const depth=thickness-2*bevel;
+    const geometry=new THREE.ExtrudeGeometry(shape,{depth,bevelEnabled:true,bevelSize:bevel,bevelThickness:bevel,bevelSegments:8,steps:1,curveSegments:16});
+    geometry.translate(0,0,-depth/2);return geometry;
+  }
+  const seatGeometry=roundedChairPanel(.62,.62,.09,.11,.017);
+  seatGeometry.rotateX(-Math.PI/2);
+  mesh(seatGeometry,materials.dark,chair,0,.58,0);
+  mesh(roundedChairPanel(.61,.62,.065,.13,.014),materials.white,chair,0,.95,.29);
+  // Rounded tubes soften the supports too; rear posts continue into the backrest.
+  const frontLeg=new THREE.CapsuleGeometry(.018,.444,6,16);
+  const rearLeg=new THREE.CapsuleGeometry(.018,.934,6,16);
+  for(const x of [-.25,.25]){
+    mesh(frontLeg,materials.edge,chair,x,.31,-.24);
+    mesh(rearLeg,materials.edge,chair,x,.555,.30);
+  }
   // Teacher and learner locations are physical floor markers in the scene.
   function floorLabel(text,x,z){
     const canvas=document.createElement('canvas');canvas.width=512;canvas.height=128;
