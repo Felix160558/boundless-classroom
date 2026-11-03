@@ -63,3 +63,11 @@ Bookings are stored only under localStorage key boundless_demo_booking. Browser 
 THREE-LICENSE.txt covers the bundled third-party Three.js runtime, GLTFLoader and BufferGeometryUtils. MESHOPT-LICENSE.txt covers the bundled Meshoptimizer decoder. The supplied character asset is included for this demo; no separate downstream redistribution license has been declared. A separate license for the original project code has not been selected.
 
 The website remains public; real-AI pilot access is invite-only. Provider credentials and the daily budget are enforced at the gateway, never by client-side counters. Do not publish the backend environment, invite codes or quota database. Browser text rendering uses textContent rather than executing model HTML.
+
+## Gentle board update
+
+The two decorative arrows beside Match and Reservation are removed. Replies now have readable emphasis, lists, code, simple tables and safely typeset mathematics through local KaTeX 0.19.1. The original character and model cache remain unchanged.
+
+The cat teacher uses a warmer, gently playful teaching voice and returns a concise board title with up to three points in the same model call. These notes appear on the actual 3D whiteboard and stay available when entering the seated space; starting a new conversation clears them. Scientific conditions and uncertainty should remain in the summary. If an older gateway reply lacks notes, the client extracts short existing sentences without another API call. Summaries and replies can still contain model mistakes.
+
+The 22-file snapshot adds teacher-content.js, katex.mjs, katex-local.css and KATEX-LICENSE.txt. Model HTML is treated as text; the renderer creates safe DOM elements and uses KaTeX with untrusted-resource features disabled. KaTeX's original WOFF2 fonts are embedded in the local stylesheet. Retain its MIT license.

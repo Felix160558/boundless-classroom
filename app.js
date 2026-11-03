@@ -1,10 +1,25 @@
 import {topics,respond} from './tutor.js';
 import {teacher} from './teacher-client.js?v=cloudflare-teacher-12';
+import {renderTeacherReply,lessonNotes} from './teacher-content.js?v=gentle-board-13';
 
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 let space=null,topic='free',pending=false,voice=false,currentMode='home',xrSupported=false;
 let toastTimer=null;
 let activeReply=null;
+const lessonBoards=new Map();
+function syncBoard(){
+  const notes=lessonBoards.get(topic);
+  const accessible=$('#whiteboard-notes');
+  accessible.hidden=currentMode==='home'||!notes;
+  if(notes){
+    const title=document.createElement('h3');title.textContent=notes.title;
+    const list=document.createElement('ul');for(const point of notes.points){const item=document.createElement('li');item.textContent=point;list.append(item);}
+    accessible.replaceChildren(title,list);
+  }else accessible.replaceChildren();
+  if(currentMode!=='home'&&notes)space?.setLesson(notes);
+  else if(currentMode==='classroom')space?.setBoard(topics[topic].title,topics[topic].sub);
+  else space?.setBoard('Stay curious.',currentMode==='vr'?'The universe is your classroom.':'Every question is a beginning.');
+}
 const defaultSceneDescription=$('#universe').getAttribute('aria-label');
 function toast(message){const el=$('#toast');el.textContent=message;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),4000);}
 function updateMode(){
@@ -20,9 +35,7 @@ function updateMode(){
   space?.setMode(currentMode);
   $('#universe').setAttribute('aria-label',currentMode==='vr'?'你坐在课桌前，面前是猫老师与白板，左右和头顶是通向星空的玻璃。拖动或使用方向键环视。':defaultSceneDescription);
   $('#back-home').lastChild.textContent=currentMode==='vr'?' 离开教室':' 返回太空';
-  if(currentMode==='vr')space?.setBoard('Stay curious.','The universe is your classroom.');
-  else if(currentMode==='classroom')space?.setBoard(topics[topic].title,topics[topic].sub);
-  else space?.setBoard('Stay curious.','Every question is a beginning.');
+  syncBoard();
   if(currentMode==='classroom')$('#chat-input').focus({preventScroll:true});
   else if(currentMode==='vr')$('#universe').focus({preventScroll:true});
   else if(currentMode==='home'&&next)$('#open-match').focus({preventScroll:true});
@@ -83,14 +96,16 @@ $('#clear-booking').addEventListener('click',()=>{
   catch{toast('未能清除，请检查浏览器存储设置。');}
 });
 
-function addMessage(who,text,mine=false){
+function addMessage(who,text,mine=false,rich=false){
   const item=document.createElement('div');item.className='message'+(mine?' mine':'');
   const label=document.createElement('small');label.textContent=who;
-  const bubble=document.createElement('div');bubble.className='bubble';bubble.textContent=text;
+  const bubble=document.createElement('div');bubble.className='bubble';
+  if(rich)renderTeacherReply(bubble,text);else bubble.textContent=text;
   item.append(label,bubble);$('#messages').append(item);$('#messages').scrollTop=$('#messages').scrollHeight;return item;
 }
 function teacherLabel(){return teacher.configured?'猫老师 · AI':'猫老师 · 离线示例';}
 function greeting(){
+  lessonBoards.clear();syncBoard();
   $('#messages').replaceChildren();
   addMessage(teacherLabel(),'你好呀，我是猫小将。🐾\n宇宙很大，我们从一个小问题开始。\n今天想一起弄明白什么？');
 }
@@ -122,7 +137,7 @@ updateConnection();
 if(teacher.configured)greeting();
 $$('.subject-button').forEach(btn=>btn.addEventListener('click',()=>{
   topic=btn.dataset.topic;$$('.subject-button').forEach(b=>{b.classList.toggle('active',b===btn);b.setAttribute('aria-pressed',String(b===btn));});
-  $('#chat-input').placeholder=topics[topic].prompt;space?.setBoard(topics[topic].title,topics[topic].sub);
+  $('#chat-input').placeholder=topics[topic].prompt;syncBoard();
   addMessage(teacher.configured?'学习主题':'猫老师 · 离线示例','我们来探索'+topics[topic].name+'。\n你可以问：'+topics[topic].prompt);
 }));
 function speak(text){
@@ -144,13 +159,15 @@ async function runTurn(turn,retry=false){
   $('#messages').setAttribute('aria-busy','true');
   activeReply=new AbortController();$('#chat-cancel').hidden=!teacher.configured;
   try{
-    let answer;
+    let answer,notes=null;
     if(teacher.configured){
-      const result=await teacher.send(turn,{signal:activeReply.signal});answer=result.reply;
+      const result=await teacher.send(turn,{signal:activeReply.signal});answer=result.reply;notes=lessonNotes(answer,result.board);
       if(result.contextTrimmed)toast('较早的对话已移出当前上下文，需要时可以再提醒猫老师。');
       if(result.finishReason==='length')toast('这次回答达到了长度上限，可以接着追问。');
-    }else{await new Promise(resolve=>setTimeout(resolve,650));answer=respond(turn.message,turn.topic);}
-    typing.remove();addMessage(teacherLabel(),answer);space?.greetTeacher();
+    }else{await new Promise(resolve=>setTimeout(resolve,650));answer=respond(turn.message,turn.topic);notes=lessonNotes(answer);}
+    typing.remove();addMessage(teacherLabel(),answer,false,true);
+    if(notes)lessonBoards.set(turn.topic,notes);else lessonBoards.delete(turn.topic);syncBoard();
+    space?.greetTeacher();
     if(currentMode==='classroom')speak(answer);
   }catch(error){
     typing.remove();const item=addMessage('连接提示',error.message);item.classList.add('message-error');
@@ -192,7 +209,7 @@ function fallback(message){
   document.body.classList.add('fallback');$('#scene-loading').hidden=true;$('#fallback-note').hidden=false;
   if(message)$('#fallback-note').textContent=message;
 }
-import('./space-scene.js?v=smooth-chair-10').then(async({createSpace})=>{
+import('./space-scene.js?v=gentle-board-13').then(async({createSpace})=>{
   space=createSpace($('#universe'),(state,detail)=>{
     if(state==='ready')$('#scene-loading').hidden=true;
     if(state==='teacher-loading'){

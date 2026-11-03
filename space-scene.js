@@ -27,7 +27,7 @@ export function createSpace(container, onState=()=>{}) {
   const room=new THREE.Group();scene.add(room);
   let mode='home',zoom=1,dragX=0,dragY=0,pointerX=0,pointerY=0;
   let moving=false,lastX=0,lastY=0,lastTime=0,frameTime=0,session=null;
-  let boardTitle='Stay curious.', boardSubtitle='Every question is a beginning.';
+  let boardTitle='Stay curious.', boardSubtitle='Every question is a beginning.',boardLesson=null;
   const desiredPosition=new THREE.Vector3(),desiredTarget=new THREE.Vector3(),target=new THREE.Vector3(0,1,0);
   const materials={
     deck:new THREE.MeshPhysicalMaterial({color:0xc5c7c3,roughness:.29,metalness:.38,clearcoat:.35,clearcoatRoughness:.3}),
@@ -109,9 +109,38 @@ export function createSpace(container, onState=()=>{}) {
     c.fillStyle='#6c776e';c.font='22px Arial';c.textAlign='left';c.fillText('BOUNDLESS CLASSROOM',86,84);
     c.textAlign='right';c.fillText('001',1450,84);
     c.strokeStyle='#a9b2a5';c.lineWidth=1;c.beginPath();c.moveTo(86,118);c.lineTo(1450,118);c.stroke();
-    c.textAlign='center';c.fillStyle='#303b37';c.font='72px Georgia';c.fillText(boardTitle,768,338);
-    c.fillStyle='#7b857b';c.font='28px Arial';c.fillText(boardSubtitle,768,415);
+    if(boardLesson){
+      c.fillStyle='#303b37';c.textAlign='left';let size=56;
+      do{c.font=size+'px Arial, sans-serif';size-=2;}while(c.measureText(boardLesson.title).width>1310&&size>=34);
+      c.fillText(boardLesson.title,100,214);
+      c.font='40px Arial, sans-serif';
+      const rows=boardLesson.points.map(point=>wrapBoardText(point,1250,2));
+      const height=rows.reduce((sum,lines)=>sum+lines.length*46,0)+(rows.length-1)*20;
+      let y=282+Math.max(0,(300-height)/2)+34;
+      for(const lines of rows){
+        c.fillStyle='#b19a75';c.beginPath();c.arc(114,y-13,5,0,Math.PI*2);c.fill();
+        c.fillStyle='#45514a';for(const line of lines){c.fillText(line,145,y);y+=46;}y+=20;
+      }
+    }else{
+      c.textAlign='center';c.fillStyle='#303b37';c.font='72px Georgia';c.fillText(boardTitle,768,338);
+      c.fillStyle='#7b857b';c.font='28px Arial';c.fillText(boardSubtitle,768,415);
+    }
+    c.textAlign='center';
     c.fillStyle='#9aa193';c.font='18px Arial';c.fillText('LOVE   ·   SHARE   ·   PEACE',768,642);boardTexture.needsUpdate=true;
+  }
+  function wrapBoardText(text,width,maxLines){
+    const chars=[...text],lines=[];let line='';
+    for(let i=0;i<chars.length;i++){
+      if(boardCtx.measureText(line+chars[i]).width<=width){line+=chars[i];continue;}
+      if(lines.length===maxLines-1){
+        while(line&&boardCtx.measureText(line+'…').width>width)line=[...line].slice(0,-1).join('');
+        lines.push(line.trimEnd()+'…');return lines;
+      }
+      const gap=line.lastIndexOf(' ');
+      if(gap>line.length*.45){lines.push(line.slice(0,gap));line=line.slice(gap+1)+chars[i];}
+      else{lines.push(line);line=chars[i].trimStart();}
+    }
+    if(line)lines.push(line);return lines;
   }
   drawBoard();
   // One desk, one chair. No additional dashboard or classroom clutter.
@@ -442,7 +471,8 @@ export function createSpace(container, onState=()=>{}) {
     // Enter/leave directly at the seat, never fly through the desk or glass.
     if(wasSeated||mode==='vr')snapView();
   }
-  function setBoard(title,subtitle){boardTitle=title;boardSubtitle=subtitle;drawBoard();}
+  function setBoard(title,subtitle){boardLesson=null;boardTitle=title;boardSubtitle=subtitle;drawBoard();}
+  function setLesson(notes){boardLesson={title:notes.title,points:notes.points.slice(0,3)};drawBoard();}
   renderer.setAnimationLoop((time,xrFrame)=>{
     // Render capped at 40fps outside XR; pause animation work while the tab is hidden.
     if(document.hidden&&!renderer.xr.isPresenting)return;
@@ -499,5 +529,5 @@ export function createSpace(container, onState=()=>{}) {
   }
   onState('ready');
   teacher.load();
-  return {setMode,setBoard,resize,greetTeacher:()=>teacher.react('tap'),immersiveSupported,enterImmersive,async endImmersive(){if(session)await session.end();}};
+  return {setMode,setBoard,setLesson,resize,greetTeacher:()=>teacher.react('tap'),immersiveSupported,enterImmersive,async endImmersive(){if(session)await session.end();}};
 }
