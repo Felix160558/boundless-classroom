@@ -19,7 +19,13 @@ The background uses a continuous panoramic stardust band surrounding the classro
 
 ## Honest demo boundaries
 
-The cat uses the original Room 001 offline chemistry, English and mathematics scripts, not a large language model. Optional speech is browser text-to-speech, not voice input. There is no backend, account system, real teacher marketplace, WebRTC, multi-user XR, payment, deposit or penalty.
+This snapshot connects the existing classroom to a separate Cloudflare Workers + D1 gateway for an invite-only DeepSeek Flash text pilot. The website remains public and requires no ChatGPT account. The gateway enforces invitation access, short-lived sessions and a shared conservative daily API budget; there is no provider key in this repository. A configured-service failure is shown honestly and never silently replaced with a scripted reply. If the operator deliberately clears apiOrigin, the interface explicitly labels the original Room 001 chemistry, English and mathematics scripts as offline.
+
+The same classroom supports multi-turn Chinese/English dialogue, waiting, cancellation, retrying the same request and starting a new conversation. The teacher is gentle, cute and patient, with a small cat-like touch and careful scientific explanations. Model output still needs checking; there is no retrieval, laboratory tool, curriculum engine or guaranteed factual verifier. Successful deployment and a valid server-side model key are required; this source snapshot alone is not evidence of a working service.
+
+For AI dialogue, text passes through Cloudflare to DeepSeek. The gateway keeps encrypted recent context for up to two idle hours, bounded to 12 recent pairs and roughly 24KB of UTF-8 content. Expired data becomes unusable immediately and is cleaned on a schedule; provider backups have separate retention. Browser chat and the short-lived access token stay in page memory and clear on reload. The pilot is not a long-term student record. Cancellation stops waiting and attempts to abort the request; it does not guarantee that the model provider stops billing.
+
+Optional speech is browser text-to-speech, not voice input. This static directory does not include a running backend. There is no account system, real teacher marketplace, WebRTC, multi-user XR, payment, deposit or penalty.
 
 Basic learning is free, with no VIP, memberships, ads or paywall. Participation is voluntary. Any future appreciation payment would be optional and transparently handled; this demo implements no payment.
 
@@ -41,8 +47,10 @@ This folder is ready to publish from the repository main branch root. In Setting
 
 - index.html — the three entry points, classroom chat and reservation dialog
 - styles.css — responsive space interface
-- app.js — navigation, local booking, offline teaching UI and capability states
+- app.js — navigation, local booking, teaching UI, service states and offline fallback mode
 - tutor.js — original Room 001 lesson scripts
+- teacher-client.js — provider-independent dialogue transport, memory-only access token and conversation identity
+- teacher-config.js — public HTTPS gateway origin only; an intentionally empty origin means explicitly offline
 - space-scene.js — 3D classroom, provided teacher loading, cosmos, camera and optional single-user WebXR
 - cat-teacher.glb — original-detail teacher with a continuous smile morph and eyelid surface metadata
 - cat-teacher.js — local model cache, continuous facial weights, curved eyelids and teacher picking
@@ -50,6 +58,8 @@ This folder is ready to publish from the repository main branch root. In Setting
 - GLTFLoader.js / BufferGeometryUtils.js — local Three.js r161 loader and utility
 - three.module.min.js / THREE-LICENSE.txt — pinned Three.js runtime and MIT notice
 
-Bookings are stored only under localStorage key boundless_demo_booking. Chat is in page memory and is cleared on reload. Browser text-to-speech behavior depends on the browser and operating system. Neither site files nor this public repository contain chat archives, original cat photographs or service credentials.
+Bookings are stored only under localStorage key boundless_demo_booking. Browser chat is in page memory and is cleared on reload; AI mode also uses the bounded encrypted backend context described above. Browser text-to-speech behavior depends on the browser and operating system. Neither site files nor this public repository contain chat archives, original cat photographs or service credentials.
 
 THREE-LICENSE.txt covers the bundled third-party Three.js runtime, GLTFLoader and BufferGeometryUtils. MESHOPT-LICENSE.txt covers the bundled Meshoptimizer decoder. The supplied character asset is included for this demo; no separate downstream redistribution license has been declared. A separate license for the original project code has not been selected.
+
+The website remains public; real-AI pilot access is invite-only. Provider credentials and the daily budget are enforced at the gateway, never by client-side counters. Do not publish the backend environment, invite codes or quota database. Browser text rendering uses textContent rather than executing model HTML.

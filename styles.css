@@ -33,3 +33,20 @@ body[data-mode=vr] #universe:focus{outline:none}
 .sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @keyframes seat-hint{0%,65%{opacity:.85}100%{opacity:0}}
 @media(max-width:600px){body[data-mode=vr] .site-header{height:72px;padding:0 5%}body[data-mode=vr] .brand-sub{display:none}body[data-mode=vr] .wordmark{font-size:8px;gap:7px}body[data-mode=vr] .header-actions{gap:12px}body[data-mode=vr] .back-button{font-size:9px}body[data-mode=vr] .vr-entry{font-size:9px;padding:0 9px}.vr-seat-caption{left:5%;bottom:22px}.vr-seat-caption>span:last-child{display:none}.vr-seat-hint{bottom:44px;font-size:8px}}
+
+/* The teacher transport changes; the quiet classroom layout stays in place. */
+.teacher-session-actions{display:flex;justify-content:flex-end;gap:16px;padding:0 27px 14px;font-size:9px;color:#bdb29a}
+.teacher-session-actions button:hover,.retry-message:hover{color:#f0e5cf}
+.compose textarea{min-width:0;flex:1;resize:vertical;max-height:140px;min-height:46px;background:#e5e9f507;border:1px solid #c6cbd229;color:#eee7d8;border-radius:4px;padding:11px 12px;font:inherit;font-size:11px;line-height:1.6}
+.compose textarea::placeholder{color:#6f7a8e}
+.chat-cancel{flex:none;padding:0 6px;font-size:10px;color:#cfc2ad}
+.connection-status{font-size:11px;line-height:1.7;color:#cfc2ad}
+.retry-message{align-self:flex-start;border-bottom:1px solid #b5a68b66;padding:3px 0;font-size:10px;color:#bdaf96}
+.retry-message:disabled{opacity:.4;cursor:default}
+.message-error .bubble{border-color:#a7876955;color:#d9c7ae}
+.thinking-message .bubble{letter-spacing:.22em;animation:teacher-wait 1.4s ease-in-out infinite}
+@keyframes teacher-wait{50%{opacity:.4}}
+@media(prefers-reduced-motion:reduce){.thinking-message .bubble{animation:none}}
+@media(max-width:600px){.teacher-session-actions{padding:0 22px 12px}.compose textarea{font-size:12px;min-height:42px}.compose-footer{align-items:flex-start}.compose-footer p{line-height:1.6}}
+
+.compose textarea:focus-visible{outline:1px solid var(--gold);outline-offset:2px}

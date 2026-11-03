@@ -1,8 +1,10 @@
 import {topics,respond} from './tutor.js';
+import {teacher} from './teacher-client.js?v=cloudflare-teacher-12';
 
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 let space=null,topic='free',pending=false,voice=false,currentMode='home',xrSupported=false;
 let toastTimer=null;
+let activeReply=null;
 const defaultSceneDescription=$('#universe').getAttribute('aria-label');
 function toast(message){const el=$('#toast');el.textContent=message;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),4000);}
 function updateMode(){
@@ -87,10 +89,41 @@ function addMessage(who,text,mine=false){
   const bubble=document.createElement('div');bubble.className='bubble';bubble.textContent=text;
   item.append(label,bubble);$('#messages').append(item);$('#messages').scrollTop=$('#messages').scrollHeight;return item;
 }
+function teacherLabel(){return teacher.configured?'猫老师 · AI':'猫老师 · 离线示例';}
+function greeting(){
+  $('#messages').replaceChildren();
+  addMessage(teacherLabel(),'你好呀，我是猫小将。🐾\n宇宙很大，我们从一个小问题开始。\n今天想一起弄明白什么？');
+}
+const connectDialog=$('#teacher-connect-dialog');
+function updateConnection(){
+  $('.teacher-session-actions').hidden=!teacher.configured;
+  $('#chat-mode').textContent=teacher.configured?(teacher.connected?'AI · 已连接':'AI · 待连接'):'离线演示';
+  $('#teacher-connect-button').hidden=!teacher.configured;
+  $('#teacher-connect-button').textContent=teacher.connected?'重新连接':'连接猫老师';
+  $('#chat-reset').hidden=!teacher.configured;
+  $('#chat-service-note').textContent=teacher.configured?'受邀试用 · 回复由 AI 生成，请核实重要结论':'预设教学脚本 · 尚未接入大模型';
+}
+function openTeacherConnection(){
+  $('#teacher-connect-status').textContent='';connectDialog.showModal();$('#teacher-invite').focus();
+}
+$('#teacher-connect-button').addEventListener('click',openTeacherConnection);
+$('#teacher-connect-close').addEventListener('click',()=>connectDialog.close());
+$('#teacher-connect-form').addEventListener('submit',async e=>{
+  e.preventDefault();const input=$('#teacher-invite'),button=$('#teacher-connect-submit');
+  if(!input.value.trim()||button.disabled)return;button.disabled=true;$('#teacher-connect-status').textContent='正在连接猫老师…';
+  try{await teacher.connect(input.value.trim());input.value='';connectDialog.close();updateConnection();toast('已经连接，想问什么都可以慢慢说。');}
+  catch(error){$('#teacher-connect-status').textContent=error.message;}
+  finally{button.disabled=false;}
+});
+connectDialog.addEventListener('close',()=>{$('#teacher-invite').value='';});
+$('#chat-reset').addEventListener('click',()=>{if(pending)return;teacher.reset();greeting();toast('已开始新对话。');});
+$('#chat-cancel').addEventListener('click',()=>activeReply?.abort());
+updateConnection();
+if(teacher.configured)greeting();
 $$('.subject-button').forEach(btn=>btn.addEventListener('click',()=>{
   topic=btn.dataset.topic;$$('.subject-button').forEach(b=>{b.classList.toggle('active',b===btn);b.setAttribute('aria-pressed',String(b===btn));});
   $('#chat-input').placeholder=topics[topic].prompt;space?.setBoard(topics[topic].title,topics[topic].sub);
-  addMessage('猫老师 · 离线示例','我们来探索'+topics[topic].name+'。\n你可以问：'+topics[topic].prompt);
+  addMessage(teacher.configured?'学习主题':'猫老师 · 离线示例','我们来探索'+topics[topic].name+'。\n你可以问：'+topics[topic].prompt);
 }));
 function speak(text){
   if(!voice||!('speechSynthesis'in window))return;
@@ -99,16 +132,47 @@ function speak(text){
 $('#voice-btn').addEventListener('click',()=>{
   if(!('speechSynthesis'in window)){toast('当前浏览器不支持文字朗读。');return;}
   voice=!voice;$('#voice-btn').textContent='朗读：'+(voice?'开':'关');$('#voice-btn').setAttribute('aria-pressed',String(voice));
-  if(!voice)speechSynthesis.cancel();toast(voice?'下一条示例回复将使用浏览器朗读。':'朗读已关闭。');
+  if(!voice)speechSynthesis.cancel();toast(voice?'下一条回复将使用浏览器朗读。':'朗读已关闭。');
 });
+async function runTurn(turn,retry=false){
+  if(pending)return;
+  const input=$('#chat-input');pending=true;$('.send').disabled=true;$('#chat-reset').disabled=true;
+  if(retry&&input.value.trim()===turn.message)input.value='';
+  $$('.retry-message').forEach(button=>{button.disabled=true;});
+  if(!retry)addMessage('你',turn.message,true);
+  const typing=addMessage(teacher.configured?'猫老师 · 正在想一想':'猫老师 · 准备示例中','⋯');typing.classList.add('thinking-message');
+  $('#messages').setAttribute('aria-busy','true');
+  activeReply=new AbortController();$('#chat-cancel').hidden=!teacher.configured;
+  try{
+    let answer;
+    if(teacher.configured){
+      const result=await teacher.send(turn,{signal:activeReply.signal});answer=result.reply;
+      if(result.contextTrimmed)toast('较早的对话已移出当前上下文，需要时可以再提醒猫老师。');
+      if(result.finishReason==='length')toast('这次回答达到了长度上限，可以接着追问。');
+    }else{await new Promise(resolve=>setTimeout(resolve,650));answer=respond(turn.message,turn.topic);}
+    typing.remove();addMessage(teacherLabel(),answer);space?.greetTeacher();
+    if(currentMode==='classroom')speak(answer);
+  }catch(error){
+    typing.remove();const item=addMessage('连接提示',error.message);item.classList.add('message-error');
+    if(error.code==='unauthorized')openTeacherConnection();
+    else if(error.code==='expired'){
+      const fresh=document.createElement('button');fresh.type='button';fresh.className='retry-message';fresh.textContent='开始新对话';fresh.addEventListener('click',()=>{if(pending)return;teacher.reset();greeting();input.value=turn.message;});item.append(fresh);
+    }else if(!['daily_limit','duplicate','invalid','cancelled'].includes(error.code)){
+      const again=document.createElement('button');again.type='button';again.className='retry-message';again.textContent='重试';again.addEventListener('click',()=>{item.remove();runTurn(turn,true);});item.append(again);
+    }
+    if(!input.value)input.value=turn.message;
+  }finally{
+    pending=false;activeReply=null;$('.send').disabled=false;$('#chat-reset').disabled=false;$('#chat-cancel').hidden=true;
+    $('#messages').setAttribute('aria-busy','false');updateConnection();if(currentMode==='classroom')input.focus({preventScroll:true});
+  }
+}
 $('#chat-form').addEventListener('submit',e=>{
-  e.preventDefault();const input=$('#chat-input'),question=input.value.trim(),requestTopic=topic;
-  if(!question||pending)return;input.value='';pending=true;$('.send').disabled=true;
-  addMessage('你',question,true);const typing=addMessage('猫老师 · 准备示例中','⋯');
-  setTimeout(()=>{
-    typing.remove();const answer=respond(question,requestTopic);addMessage('猫老师 · 离线示例',answer);
-    if(currentMode==='classroom')speak(answer);pending=false;$('.send').disabled=false;if(currentMode==='classroom')input.focus({preventScroll:true});
-  },650);
+  e.preventDefault();const input=$('#chat-input'),question=input.value.trim();
+  if(!question||pending)return;if(teacher.configured&&!teacher.connected){openTeacherConnection();return;}
+  const turn=teacher.turn(question,topic);input.value='';runTurn(turn);
+});
+$('#chat-input').addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('#chat-form').requestSubmit();}
 });
 $('#immersive-btn').addEventListener('click',async()=>{
   if(xrSupported&&space){
@@ -122,7 +186,7 @@ $('#immersive-btn').addEventListener('click',async()=>{
 });
 document.addEventListener('fullscreenchange',()=>{if(!xrSupported)$('#immersive-btn').innerHTML=document.fullscreenElement?'退出全屏 ⤢':'全屏 ⤢';});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&'speechSynthesis'in window)speechSynthesis.cancel();});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!dialog.open&&currentMode!=='home'&&!document.fullscreenElement)navigate('home');});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('dialog[open]')&&currentMode!=='home'&&!document.fullscreenElement)navigate('home');});
 
 function fallback(message){
   document.body.classList.add('fallback');$('#scene-loading').hidden=true;$('#fallback-note').hidden=false;
@@ -137,9 +201,9 @@ import('./space-scene.js?v=smooth-chair-10').then(async({createSpace})=>{
     if(state==='teacher-progress')$('#scene-loading').lastChild.textContent=' 正在载入你的猫老师 · '+detail+'%';
     if(state==='teacher-ready')$('#scene-loading').hidden=true;
     if(state==='teacher-error'){
-      $('#scene-loading').hidden=true;$('#fallback-note').textContent='猫老师模型暂时未能载入，刷新可重试。离线教学与预约仍可使用。';$('#fallback-note').hidden=false;
+      $('#scene-loading').hidden=true;$('#fallback-note').textContent='猫老师模型暂时未能载入，刷新可重试。文字课堂和本地预约仍可使用。';$('#fallback-note').hidden=false;
     }
-    if(state==='lost')fallback('3D 画面暂时中断。请刷新恢复，教学与预约演示仍可使用。');
+    if(state==='lost')fallback('3D 画面暂时中断。请刷新恢复，文字课堂和本地预约仍可使用。');
     if(state==='restored'){document.body.classList.remove('fallback');$('#fallback-note').hidden=true;}
     if(state==='xr-start'){$('#xr-status').textContent='单人头显空间，已在课桌座位处定位。';}
     if(state==='xr-end'){$('#xr-status').textContent='课桌座位视角，拖动或方向键环视。';}
