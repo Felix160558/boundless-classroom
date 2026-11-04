@@ -25,7 +25,7 @@ The same classroom supports multi-turn Chinese/English dialogue, waiting, cancel
 
 For AI dialogue, text passes through Cloudflare to DeepSeek. The gateway keeps encrypted recent context for up to two idle hours, bounded to 12 recent pairs and roughly 24KB of UTF-8 content. Expired data becomes unusable immediately and is cleaned on a schedule; provider backups have separate retention. Browser chat stays in page memory and clears on reload. With the owner-requested remember-connection feature, the app access token is retained in this browser for up to 30 days; the raw invitation and provider key are never saved in browser storage. The pilot is not a long-term student record. Cancellation stops waiting and attempts to abort the request; it does not guarantee that the model provider stops billing.
 
-Optional speech is browser text-to-speech, not voice input. This static directory does not include a running backend. There is no account system, real teacher marketplace, WebRTC, multi-user XR, payment, deposit or penalty.
+The microphone beside the composer uses browser-managed speech recognition to transcribe speech into an editable draft; it never sends the draft automatically. The separate read-aloud toggle remains browser text-to-speech. This static directory does not include a running backend. There is no account system, real teacher marketplace, WebRTC, multi-user XR, payment, deposit or penalty.
 
 Basic learning is free, with no VIP, memberships, ads or paywall. Participation is voluntary. Any future appreciation payment would be optional and transparently handled; this demo implements no payment.
 
@@ -70,7 +70,7 @@ The two decorative arrows beside Match and Reservation are removed. Replies now 
 
 The cat teacher uses a warmer, gently playful teaching voice and returns a concise board title with up to three points in the same model call. These notes appear on the actual 3D whiteboard and stay available when entering the seated space; starting a new conversation clears them. Scientific conditions and uncertainty should remain in the summary. If an older gateway reply lacks notes, the client extracts short existing sentences without another API call. Summaries and replies can still contain model mistakes.
 
-The 23-file snapshot adds teacher-content.js, katex.mjs, katex-local.css and KATEX-LICENSE.txt. Model HTML is treated as text; the renderer creates safe DOM elements and uses KaTeX with untrusted-resource features disabled. KaTeX's original WOFF2 fonts are embedded in the local stylesheet. Retain its MIT license.
+The 24-file snapshot adds teacher-content.js, katex.mjs, katex-local.css and KATEX-LICENSE.txt. Model HTML is treated as text; the renderer creates safe DOM elements and uses KaTeX with untrusted-resource features disabled. KaTeX's original WOFF2 fonts are embedded in the local stylesheet. Retain its MIT license.
 
 Quiet-entry-14 makes each home entry underline match its own word width using an intrinsic-width inline-flex button. Keep Match and Reservation independent; do not stretch their borders to the anchor width or restore decorative arrows. The teacher/board features remain gentle-board-13 and the model cache remains fluid-cat-6.
 
@@ -96,3 +96,12 @@ The body tail now uses two native relative morph targets driven by continuous si
 ## Time tail 19
 
 Idle tail motion is driven directly by the absolute seconds supplied by renderer.setAnimationLoop, independently of clicks, hover, classroom entry or face reactions. It uses a small anchored rotation field with soft tip delay, gently varying analytic phase/amplitude and a smooth startup. A fresh geometry instance carries a dynamic position buffer; only mapped tail vertices are updated from immutable neutral coordinates each frame, marked with needsUpdate. No custom shader or late-added body morph layout is required. The corrected root falloff gives the tail body meaningful movement rather than suppressing most vertices to tiny offsets. Respect reduced-motion preferences and pause rendering in hidden tabs. Keep the supplied GLB, head, texture, proportions, lazy loading, 30-day access and budget unchanged. Visual acceptance still belongs to the owner.
+
+
+## Voice input 20
+
+A small microphone beside the text field starts dictation on a user click, with interim text, a restrained listening indicator, elapsed time, stop and “重新录入”. Restart replaces the latest unedited voice take and preserves the text that preceded it. Typing, leaving the classroom, hiding the page, opening invitation access or starting a new dialogue stops listening. Sending finishes the current take first and ignores late recognition callbacks. No automatic submission or background restart occurs. Ordinary topics use Mandarin; the English topic uses en-US recognition.
+
+Speech recognition requires a supported browser, HTTPS and microphone/recognition permission. Safari may also require Siri or Dictation enabled in system settings. Recognition may use the browser vendor's service; do not assume all audio stays on-device. The site does not save audio recordings, add an ASR backend or put credentials in the client. Only confirmed text is sent to the existing teacher gateway. Unsupported browsers and permission/service errors keep normal text input available. The lightweight dictation.js module loads independently of the classroom.
+
+The composer is lightly transparent with one thin rounded border, subtle microphone feedback and restrained round controls. The existing teacher, space, tail, conversation, remembered access and daily budget remain unchanged. Microphone, transcription and visual acceptance belong to the owner; no live microphone test is claimed.

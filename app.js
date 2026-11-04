@@ -6,6 +6,7 @@ const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 let space=null,topic='free',pending=false,voice=false,currentMode='home',xrSupported=false;
 let toastTimer=null;
 let activeReply=null;
+let dictation=null,dictationFailure='',voiceSubmit=false;
 const lessonBoards=new Map();
 function syncBoard(){
   const notes=lessonBoards.get(topic);
@@ -25,6 +26,7 @@ function toast(message){const el=$('#toast');el.textContent=message;el.classList
 function updateMode(){
   const next=location.hash.slice(1);
   currentMode=['classroom','vr'].includes(next)?next:'home';
+  if(currentMode!=='classroom')dictation?.cancel();
   document.body.dataset.mode=currentMode;
   $('#home-view').hidden=currentMode!=='home';
   $('#classroom-view').hidden=currentMode!=='classroom';
@@ -36,6 +38,7 @@ function updateMode(){
   $('#universe').setAttribute('aria-label',currentMode==='vr'?'你坐在课桌前，面前是猫老师与白板，左右和头顶是通向星空的玻璃。拖动或使用方向键环视。':defaultSceneDescription);
   $('#back-home').lastChild.textContent=currentMode==='vr'?' 离开教室':' 返回太空';
   syncBoard();
+  syncComposer();
   if(currentMode==='classroom')$('#chat-input').focus({preventScroll:true});
   else if(currentMode==='vr')$('#universe').focus({preventScroll:true});
   else if(currentMode==='home'&&next)$('#open-match').focus({preventScroll:true});
@@ -119,16 +122,18 @@ function updateConnection(){
   $('#chat-service-note').textContent=teacher.configured?'受邀试用 · 回复由 AI 生成，请核实重要结论':'预设教学脚本 · 尚未接入大模型';
 }
 function openTeacherConnection(){
+  dictation?.cancel();
   $('#teacher-connect-status').textContent='';connectDialog.showModal();$('#teacher-invite').focus();
 }
 $('#teacher-connect-button').addEventListener('click',()=>{
+  dictation?.cancel();dictation?.forget();
   if(teacher.connected){teacher.disconnect();activeReply?.abort();greeting();updateConnection();toast('已退出连接，并清除此浏览器记住的连接。');}
   else openTeacherConnection();
 });
 window.addEventListener('storage',event=>{
   if(event.key!==teacher.storageKey&&event.key!==null)return;
   const previous=teacher.token;teacher.restore();
-  if(previous!==teacher.token){activeReply?.abort();greeting();updateConnection();}
+  if(previous!==teacher.token){dictation?.cancel();dictation?.forget();activeReply?.abort();greeting();updateConnection();}
 });
 $('#teacher-connect-close').addEventListener('click',()=>connectDialog.close());
 $('#teacher-connect-form').addEventListener('submit',async e=>{
@@ -139,17 +144,56 @@ $('#teacher-connect-form').addEventListener('submit',async e=>{
   finally{button.disabled=false;}
 });
 connectDialog.addEventListener('close',()=>{$('#teacher-invite').value='';});
-$('#chat-reset').addEventListener('click',()=>{if(pending)return;teacher.reset();greeting();toast('已开始新对话。');});
+$('#chat-reset').addEventListener('click',()=>{if(pending)return;dictation?.cancel();dictation?.forget();teacher.reset();greeting();toast('已开始新对话。');});
 $('#chat-cancel').addEventListener('click',()=>activeReply?.abort());
 updateConnection();
 if(teacher.configured)greeting();
 $$('.subject-button').forEach(btn=>btn.addEventListener('click',()=>{
+  dictation?.cancel();dictation?.forget();
   topic=btn.dataset.topic;$$('.subject-button').forEach(b=>{b.classList.toggle('active',b===btn);b.setAttribute('aria-pressed',String(b===btn));});
   $('#chat-input').placeholder=topics[topic].prompt;syncBoard();
   addMessage(teacher.configured?'学习主题':'猫老师 · 离线示例','我们来探索'+topics[topic].name+'。\n你可以问：'+topics[topic].prompt);
 }));
+function syncComposer(){
+  const input=$('#chat-input');input.style.height='auto';input.style.height=Math.min(132,input.scrollHeight)+'px';
+  $('.send').disabled=pending||voiceSubmit||!input.value.trim();
+}
+function renderDictation({state='idle',message='',supported=true,canRestart=false,seconds=0}){
+  const active=['starting','listening','stopping'].includes(state),button=$('#dictation-button');
+  $('#chat-form').dataset.dictation=state;button.disabled=state==='stopping';
+  button.setAttribute('aria-pressed',String(active));button.setAttribute('aria-disabled',String(!supported));
+  button.setAttribute('aria-label',active?'停止语音输入':'语音输入');
+  button.title=active?'停止语音输入':'语音输入 · 由浏览器识别，确认文字后再发送';
+  if($('#dictation-status').textContent!==message)$('#dictation-status').textContent=message;
+  $('#dictation-time').textContent=state==='listening'?Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0'):'';
+  $('#dictation-row').hidden=!message;$('#dictation-restart').hidden=!canRestart;
+  syncComposer();
+}
+const dictationWait=setTimeout(()=>{
+  dictationFailure='语音输入载入较慢，请稍后再试。';$('#dictation-button').disabled=false;
+},12000);
+import('./dictation.js?v=voice-input-20').then(({createDictation})=>{
+  clearTimeout(dictationWait);dictationFailure='';
+  dictation=createDictation({getText:()=>$('#chat-input').value,setText:text=>{$('#chat-input').value=text;syncComposer();},
+    getLanguage:()=>topic==='english'?'en-US':'zh-CN',onState:renderDictation});
+}).catch(()=>{
+  clearTimeout(dictationWait);dictationFailure='语音输入暂未载入，请刷新重试；文字输入仍可使用。';$('#dictation-button').disabled=false;
+});
+$('#dictation-button').addEventListener('click',()=>{
+  if(!dictation){renderDictation({state:'error',message:dictationFailure||'语音输入正在准备，请稍后再试。'});return;}
+  if(dictation.active){void dictation.stop();return;}
+  if('speechSynthesis'in window)speechSynthesis.cancel();
+  dictation.start();
+});
+$('#dictation-restart').addEventListener('click',()=>{
+  if(!dictation||dictation.active)return;
+  if('speechSynthesis'in window)speechSynthesis.cancel();dictation.restart();
+});
+$('#chat-input').addEventListener('beforeinput',()=>{dictation?.cancel();dictation?.forget();});
+$('#chat-input').addEventListener('input',syncComposer);
+window.addEventListener('pagehide',()=>dictation?.cancel());
 function speak(text){
-  if(!voice||!('speechSynthesis'in window))return;
+  if(!voice||dictation?.active||!('speechSynthesis'in window))return;
   try{speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(text);utterance.lang=/[\u4e00-\u9fff]/.test(text)?'zh-CN':'en-US';utterance.rate=.96;speechSynthesis.speak(utterance);}catch{toast('当前浏览器未能朗读。');}
 }
 $('#voice-btn').addEventListener('click',()=>{
@@ -159,6 +203,7 @@ $('#voice-btn').addEventListener('click',()=>{
 });
 async function runTurn(turn,retry=false){
   if(pending)return;
+  dictation?.cancel();dictation?.forget();
   const input=$('#chat-input');pending=true;$('.send').disabled=true;$('#chat-reset').disabled=true;
   if(retry&&input.value.trim()===turn.message)input.value='';
   $$('.retry-message').forEach(button=>{button.disabled=true;});
@@ -189,16 +234,23 @@ async function runTurn(turn,retry=false){
     }
     if(!input.value)input.value=turn.message;
   }finally{
-    pending=false;activeReply=null;$('.send').disabled=false;$('#chat-reset').disabled=false;$('#chat-cancel').hidden=true;
+    pending=false;activeReply=null;syncComposer();$('#chat-reset').disabled=false;$('#chat-cancel').hidden=true;
     $('#messages').setAttribute('aria-busy','false');updateConnection();if(currentMode==='classroom')input.focus({preventScroll:true});
   }
 }
-$('#chat-form').addEventListener('submit',e=>{
-  e.preventDefault();const input=$('#chat-input'),question=input.value.trim();
-  if(!question||pending)return;if(teacher.configured&&!teacher.connected){openTeacherConnection();return;}
-  const turn=teacher.turn(question,topic);input.value='';runTurn(turn);
+$('#chat-form').addEventListener('submit',async e=>{
+  e.preventDefault();if(pending||voiceSubmit)return;
+  voiceSubmit=true;syncComposer();
+  try{
+    await dictation?.stop();
+    const input=$('#chat-input'),question=input.value.trim();
+    if(!question||currentMode!=='classroom')return;
+    if(teacher.configured&&!teacher.connected){openTeacherConnection();return;}
+    const turn=teacher.turn(question,topic);input.value='';syncComposer();void runTurn(turn);
+  }finally{voiceSubmit=false;syncComposer();}
 });
 $('#chat-input').addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&dictation?.active){e.preventDefault();e.stopPropagation();void dictation.stop();return;}
   if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('#chat-form').requestSubmit();}
 });
 $('#immersive-btn').addEventListener('click',async()=>{
@@ -212,7 +264,7 @@ $('#immersive-btn').addEventListener('click',async()=>{
   }catch{toast('此浏览器暂时无法进入全屏。');}
 });
 document.addEventListener('fullscreenchange',()=>{if(!xrSupported)$('#immersive-btn').innerHTML=document.fullscreenElement?'退出全屏 ⤢':'全屏 ⤢';});
-document.addEventListener('visibilitychange',()=>{if(document.hidden&&'speechSynthesis'in window)speechSynthesis.cancel();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){dictation?.cancel();if('speechSynthesis'in window)speechSynthesis.cancel();}});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('dialog[open]')&&currentMode!=='home'&&!document.fullscreenElement)navigate('home');});
 
 function fallback(message){

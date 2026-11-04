@@ -8,12 +8,12 @@
   <title>Boundless Classroom · Space Version</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23080c12'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-size='46' fill='%23f3f0e8'%3E∞%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="./katex-local.css">
-  <link rel="stylesheet" href="./styles.css?v=quiet-entry-14">
+  <link rel="stylesheet" href="./styles.css?v=voice-input-20">
   <link rel="preload" as="fetch" href="./cat-teacher.glb?v=fluid-cat-6" crossorigin="anonymous" fetchpriority="low">
   <link rel="modulepreload" href="./space-scene.js?v=time-tail-19">
   <link rel="modulepreload" href="./three.module.min.js">
   <link rel="modulepreload" href="./meshopt_decoder.mjs">
-  <script type="module" src="./app.js?v=time-tail-19"></script>
+  <script type="module" src="./app.js?v=voice-input-20"></script>
 </head>
 <body data-mode="home">
   <div class="cosmos-fallback" aria-hidden="true"><div class="fallback-platform"></div></div>
@@ -64,7 +64,22 @@
 宇宙很大，我们从一个小问题开始。
 选个主题，或者问我一句吧。</div></div></div>
         <form id="chat-form" class="compose">
-          <div><textarea id="chat-input" aria-label="向猫老师提问" placeholder="今天想弄明白什么？" maxlength="4000" rows="2" autocomplete="off" required></textarea><button type="button" id="chat-cancel" class="chat-cancel" hidden aria-label="停止等待回复">停止</button><button type="submit" class="send" aria-label="发送消息">↑</button></div>
+          <div class="composer-shell">
+            <textarea id="chat-input" aria-label="向猫老师提问" placeholder="今天想弄明白什么？" maxlength="4000" rows="2" autocomplete="off" required></textarea>
+            <div class="composer-actions">
+              <button type="button" id="chat-cancel" class="chat-cancel" hidden aria-label="停止等待回复">停止</button>
+              <button type="button" id="dictation-button" class="mic-button" aria-label="语音输入" aria-pressed="false" title="语音输入 · 由浏览器识别，确认文字后再发送" disabled>
+                <svg class="mic-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5.5 10.5v1a6.5 6.5 0 0 0 13 0v-1M12 18v3m-3 0h6"/></svg>
+                <svg class="mic-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="7.5" y="7.5" width="9" height="9" rx="2"/></svg>
+              </button>
+              <button type="submit" class="send" aria-label="发送消息"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-5 5 5-5 5 5"/></svg></button>
+            </div>
+          </div>
+          <div class="dictation-row" id="dictation-row" hidden>
+            <span class="dictation-wave" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+            <p id="dictation-status" role="status" aria-live="polite"></p><span id="dictation-time" aria-hidden="true"></span>
+            <button type="button" id="dictation-restart" hidden>重新录入</button>
+          </div>
           <div class="compose-footer"><p id="chat-service-note">预设教学脚本 · 尚未接入大模型</p><button id="voice-btn" type="button" aria-pressed="false">朗读：关</button></div>
         </form>
       </aside>
