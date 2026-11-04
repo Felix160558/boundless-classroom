@@ -81,3 +81,8 @@ Enter the invitation once to remember the connection in the same browser for 30 
 ## Gentle tail update
 
 The two home captions beneath Match and Reservation are removed. The supplied teacher now has a subtle, continuous tail sway with slowly varying amplitude and speed. A smooth geodesic mask anchors the tail root, and the existing mesh is bent only during rendering. The original GLB, 4K texture, face, proportions and fluid-cat-6 model cache remain unchanged. There are no programmed pauses; reduced-motion preferences smoothly return the tail to rest. cat-tail-rig.js contains the small derived weight map. The owner handles visual and device acceptance.
+
+
+## Classroom load 17
+
+The first classroom render no longer waits for the tail weight map, GLB loader or geometry decoder. Those resources load separately after the scene starts; idle tail motion attaches after the complete teacher appears. The unchanged detailed GLB preloads at low priority so essential classroom scripts can load first. A 45-second startup notice and stalled-model download timeout replace indefinite waiting; optional-tail failures leave the teacher and classroom visible and explain the missing animation. The small tail sway has a slightly larger lateral range to remain perceptible, retaining smooth random targets, tip delay and the fixed root. Scene/app cache version is classroom-load-17; model and weight-map cache identities remain unchanged. Visual/device acceptance belongs to the owner.

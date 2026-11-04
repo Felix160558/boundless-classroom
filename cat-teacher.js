@@ -1,7 +1,4 @@
 import * as THREE from './three.module.min.js';
-import {GLTFLoader} from './GLTFLoader.js';
-import {MeshoptDecoder} from './meshopt_decoder.mjs';
-import tailRig from './cat-tail-rig.js?v=gentle-tail-16';
 
 const VERSION='fluid-cat-6';
 const ease=x=>{const t=THREE.MathUtils.clamp(x,0,1);return t*t*t*(t*(t*6-15)+10);};
@@ -21,9 +18,9 @@ function approach(state,target,dt,tau){
 
 // A soft, connected bend of the existing tail surface, anchored at its root.
 // Geometry, original texture, head shape and character scale stay untouched.
-function createTailMotion(meshes){
+function createTailMotion(meshes,tailRig){
   const mesh=meshes.find(object=>object.geometry.attributes.position.count===tailRig.vertexCount);
-  if(!mesh||tailRig.assetVersion!==VERSION)return ()=>{};
+  if(!mesh||tailRig.assetVersion!==VERSION)throw new Error('Tail rig does not match the teacher asset.');
   const weights=new Float32Array(tailRig.vertexCount);
   for(let i=0;i<tailRig.weights.length;i+=2)weights[tailRig.weights[i]]=tailRig.weights[i+1];
   mesh.geometry.setAttribute('teacherTailWeight',new THREE.BufferAttribute(weights,1));
@@ -41,8 +38,8 @@ function createTailMotion(meshes){
   mesh.material=Array.isArray(mesh.material)?mesh.material.map(material=>shader(material.clone())):shader(mesh.material.clone());
   const side=Array.isArray(mesh.material)?mesh.material[0].side:mesh.material.side;
   mesh.customDepthMaterial=shader(new THREE.MeshDepthMaterial({depthPacking:THREE.RGBADepthPacking,side}));
-  if(mesh.geometry.boundingBox)mesh.geometry.boundingBox.expandByScalar(.012);
-  if(mesh.geometry.boundingSphere)mesh.geometry.boundingSphere.radius+=.012;
+  if(mesh.geometry.boundingBox)mesh.geometry.boundingBox.expandByScalar(.022);
+  if(mesh.geometry.boundingSphere)mesh.geometry.boundingSphere.radius+=.022;
   const amplitude={value:0,velocity:0},speed={value:.85,velocity:0};
   let phase=Math.random()*Math.PI*2,followPhase=phase*.63,clock=0,nextChange=0,targetAmplitude=.55,targetSpeed=.85;
   function damp(state,target,dt,tau){
@@ -54,7 +51,7 @@ function createTailMotion(meshes){
     if(clock>=nextChange){targetAmplitude=.4+Math.random()*.45;targetSpeed=.65+Math.random()*.45;nextChange=clock+4+Math.random()*6;}
     damp(amplitude,reducedMotion?0:targetAmplitude,dt,1.8);damp(speed,targetSpeed,dt,2.2);
     phase=(phase+dt*speed.value)%(Math.PI*2);followPhase=(followPhase+dt*speed.value*.63)%(Math.PI*2);
-    motion.set(.0075*amplitude.value,.0015*amplitude.value,phase,followPhase);
+    motion.set(.018*amplitude.value,.002*amplitude.value,phase,followPhase);
   };
 }
 
@@ -118,15 +115,20 @@ async function readModel(url,onProgress){
   if(cache){
     try{const saved=await cache.match(url);if(saved)return {bytes:await saved.arrayBuffer(),cache,stored:null};}catch{}
   }
-  const response=await fetch(url,{credentials:'same-origin'});
-  if(!response.ok)throw new Error('Model download failed: '+response.status);
-  const stored=cache?response.clone():null,total=Number(response.headers.get('content-length'))||0;
-  if(!response.body?.getReader)return {bytes:await response.arrayBuffer(),cache,stored};
-  const reader=response.body.getReader(),chunks=[];let length=0;
-  for(;;){const {value,done}=await reader.read();if(done)break;chunks.push(value);length+=value.length;if(total)onProgress(Math.min(99,Math.round(length/total*100)));}
-  const bytes=new Uint8Array(length);let offset=0;
-  for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
-  return {bytes:bytes.buffer,cache,stored};
+  const controller=new AbortController();let stalled;
+  const keepAlive=()=>{clearTimeout(stalled);stalled=setTimeout(()=>controller.abort(),45000);};
+  keepAlive();
+  try{
+    const response=await fetch(url,{credentials:'same-origin',priority:'low',signal:controller.signal});
+    if(!response.ok)throw new Error('Model download failed: '+response.status);
+    const stored=cache?response.clone():null,total=Number(response.headers.get('content-length'))||0;
+    if(!response.body?.getReader)return {bytes:await response.arrayBuffer(),cache,stored};
+    const reader=response.body.getReader(),chunks=[];let length=0;
+    for(;;){const {value,done}=await reader.read();if(done)break;keepAlive();chunks.push(value);length+=value.length;if(total)onProgress(Math.min(99,Math.round(length/total*100)));}
+    const bytes=new Uint8Array(length);let offset=0;
+    for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
+    return {bytes:bytes.buffer,cache,stored};
+  }finally{clearTimeout(stalled);}
 }
 async function storeModel(cache,url,response){
   if(!cache||!response)return;
@@ -163,7 +165,11 @@ export function createCatTeacher(onState=()=>{}) {
     const url=new URL('./cat-teacher.glb?v='+VERSION,import.meta.url).href;
     let cached=null;
     try{
-      const download=await readModel(url,percent=>onState('teacher-progress',percent));cached=download.cache;
+      // Downloads and decoding tools are independent of the first classroom render.
+      const [download,{GLTFLoader},{MeshoptDecoder}]=await Promise.all([
+        readModel(url,percent=>onState('teacher-progress',percent)),
+        import('./GLTFLoader.js'),import('./meshopt_decoder.mjs')
+      ]);cached=download.cache;
       const loader=new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
       const asset=await loader.parseAsync(download.bytes,new URL('./',import.meta.url).href);
       const teacher=asset.scene;body=teacher.getObjectByName('Body');head=teacher.getObjectByName('Face_neutral');
@@ -192,8 +198,13 @@ export function createCatTeacher(onState=()=>{}) {
       bodyMeshes=meshList(body);faceMeshes=meshList(head);
       const faceMaterial=Array.isArray(faceMeshes[0].material)?faceMeshes[0].material[0]:faceMeshes[0].material;
       for(const rig of head.userData.eyeRig)eyelids.push(createEyelid(rig,faceMaterial,head));
-      updateTail=createTailMotion(bodyMeshes);
       model=teacher;group.add(model);onState('teacher-ready');
+      // Optional idle motion must never hold the whole classroom or model hostage.
+      const tailTimer=setTimeout(()=>onState('teacher-tail-error'),30000);
+      import('./cat-tail-rig.js?v=gentle-tail-16').then(({default:tailRig})=>{
+        clearTimeout(tailTimer);
+        updateTail=createTailMotion(bodyMeshes,tailRig);onState('teacher-tail-ready');
+      }).catch(()=>{clearTimeout(tailTimer);onState('teacher-tail-error');});
       void storeModel(download.cache,url,download.stored);
       const first=pending||(inClassroom?{kind:'welcome',direction:0}:null);pending=null;
       if(first)react(first.kind,first.direction);

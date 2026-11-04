@@ -219,14 +219,24 @@ function fallback(message){
   document.body.classList.add('fallback');$('#scene-loading').hidden=true;$('#fallback-note').hidden=false;
   if(message)$('#fallback-note').textContent=message;
 }
-import('./space-scene.js?v=gentle-tail-16').then(async({createSpace})=>{
+const sceneStartupTimer=setTimeout(()=>{
+  if(!space)fallback('三维教室资源载入较慢，可刷新重试。文字课堂和预约仍可使用。');
+},45000);
+import('./space-scene.js?v=classroom-load-17').then(async({createSpace})=>{
+  clearTimeout(sceneStartupTimer);
   space=createSpace($('#universe'),(state,detail)=>{
-    if(state==='ready')$('#scene-loading').hidden=true;
+    if(state==='ready'){
+      document.body.classList.remove('fallback');$('#fallback-note').hidden=true;$('#scene-loading').hidden=true;
+    }
     if(state==='teacher-loading'){
       const indicator=$('#scene-loading');indicator.replaceChildren(document.createElement('span'),document.createTextNode(' 正在载入你的猫老师'));indicator.hidden=false;
     }
     if(state==='teacher-progress')$('#scene-loading').lastChild.textContent=' 正在载入你的猫老师 · '+detail+'%';
     if(state==='teacher-ready')$('#scene-loading').hidden=true;
+    if(state==='teacher-tail-error'){
+      $('#fallback-note').textContent='猫老师已载入，尾巴动画资源暂未载入，可刷新重试。';$('#fallback-note').hidden=false;
+    }
+    if(state==='teacher-tail-ready')$('#fallback-note').hidden=true;
     if(state==='teacher-error'){
       $('#scene-loading').hidden=true;$('#fallback-note').textContent='猫老师模型暂时未能载入，刷新可重试。文字课堂和本地预约仍可使用。';$('#fallback-note').hidden=false;
     }
@@ -237,4 +247,4 @@ import('./space-scene.js?v=gentle-tail-16').then(async({createSpace})=>{
   });
   updateMode();xrSupported=await space.immersiveSupported();
   if(xrSupported){$('#immersive-btn').textContent='进入头显 ↗';$('#xr-status').textContent='课桌座位视角，设备支持实验性单人头显入口。';}
-}).catch(()=>fallback());
+}).catch(()=>{clearTimeout(sceneStartupTimer);fallback('三维教室暂未载入，请刷新重试。文字课堂和预约仍可使用。');});
