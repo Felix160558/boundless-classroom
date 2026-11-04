@@ -18,40 +18,46 @@ function approach(state,target,dt,tau){
 
 // A soft, connected bend of the existing tail surface, anchored at its root.
 // Geometry, original texture, head shape and character scale stay untouched.
-function createTailMotion(meshes,tailRig){
+export function createTailMotion(meshes,tailRig,onMotion=()=>{}){
   const mesh=meshes.find(object=>object.geometry.attributes.position.count===tailRig.vertexCount);
   if(!mesh||tailRig.assetVersion!==VERSION)throw new Error('Tail rig does not match the teacher asset.');
-  const weights=new Float32Array(tailRig.vertexCount);
-  for(let i=0;i<tailRig.weights.length;i+=2)weights[tailRig.weights[i]]=tailRig.weights[i+1];
-  mesh.geometry.setAttribute('teacherTailWeight',new THREE.BufferAttribute(weights,1));
-  const motion=new THREE.Vector4();
-  const shader=material=>{
-    material.onBeforeCompile=program=>{
-      program.uniforms.teacherTailMotion={value:motion};
-      program.vertexShader='uniform vec4 teacherTailMotion;\nattribute float teacherTailWeight;\n'+program.vertexShader.replace('#include <project_vertex>',
-        'float teacherTailPhase = teacherTailMotion.z - 0.32 * teacherTailWeight;\n'+
-        'transformed.x += teacherTailMotion.x * teacherTailWeight * (sin(teacherTailPhase) + 0.14 * sin(teacherTailMotion.w + 1.8 - 0.42 * teacherTailWeight));\n'+
-        'transformed.z += teacherTailMotion.y * teacherTailWeight * teacherTailWeight * sin(teacherTailPhase - 0.45);\n#include <project_vertex>');
-    };
-    material.customProgramCacheKey=()=> 'boundless-gentle-tail-16';return material;
-  };
-  mesh.material=Array.isArray(mesh.material)?mesh.material.map(material=>shader(material.clone())):shader(mesh.material.clone());
-  const side=Array.isArray(mesh.material)?mesh.material[0].side:mesh.material.side;
-  mesh.customDepthMaterial=shader(new THREE.MeshDepthMaterial({depthPacking:THREE.RGBADepthPacking,side}));
-  if(mesh.geometry.boundingBox)mesh.geometry.boundingBox.expandByScalar(.022);
-  if(mesh.geometry.boundingSphere)mesh.geometry.boundingSphere.radius+=.022;
+  const geometry=mesh.geometry;
+  if(geometry.morphAttributes.position?.length)throw new Error('The tail must attach only to the neutral body mesh.');
+  // Native relative morphs share the renderer's proven facial-animation path.
+  // Two quadrature poses express one travelling bend with a delayed tip.
+  const wave=new Float32Array(tailRig.vertexCount*3),follow=new Float32Array(wave.length);
+  for(let i=0;i<tailRig.weights.length;i+=2){
+    const vertex=tailRig.weights[i],weight=tailRig.weights[i+1],offset=vertex*3,lag=.32*weight;
+    wave[offset]=.018*weight*Math.cos(lag);
+    follow[offset]=-.018*weight*Math.sin(lag);
+    wave[offset+2]=.002*weight*weight*Math.cos(lag+.45);
+    follow[offset+2]=-.002*weight*weight*Math.sin(lag+.45);
+  }
+  const waveTarget=new THREE.BufferAttribute(wave,3),followTarget=new THREE.BufferAttribute(follow,3);
+  waveTarget.name='IdleTailWave';followTarget.name='IdleTailFollow';
+  geometry.morphTargetsRelative=true;geometry.morphAttributes.position=[waveTarget,followTarget];
+  mesh.updateMorphTargets();
+  for(const material of Array.isArray(mesh.material)?mesh.material:[mesh.material])material.needsUpdate=true;
+  if(geometry.boundingBox)geometry.boundingBox.expandByScalar(.022);
+  if(geometry.boundingSphere)geometry.boundingSphere.radius+=.022;
   const amplitude={value:0,velocity:0},speed={value:.85,velocity:0};
-  let phase=Math.random()*Math.PI*2,followPhase=phase*.63,clock=0,nextChange=0,targetAmplitude=.55,targetSpeed=.85;
+  let phase=Math.random()*Math.PI*2,clock=0,nextChange=0,targetAmplitude=.55,targetSpeed=.85,reportClock=1,reportedMode;
   function damp(state,target,dt,tau){
     const omega=2/tau,decay=Math.exp(-omega*dt),difference=state.value-target,step=(state.velocity+omega*difference)*dt;
     state.velocity=(state.velocity-omega*step)*decay;state.value=target+(difference+step)*decay;
   }
   return (dt,reducedMotion)=>{
-    clock+=dt;
+    clock+=dt;reportClock+=dt;
     if(clock>=nextChange){targetAmplitude=.4+Math.random()*.45;targetSpeed=.65+Math.random()*.45;nextChange=clock+4+Math.random()*6;}
     damp(amplitude,reducedMotion?0:targetAmplitude,dt,1.8);damp(speed,targetSpeed,dt,2.2);
-    phase=(phase+dt*speed.value)%(Math.PI*2);followPhase=(followPhase+dt*speed.value*.63)%(Math.PI*2);
-    motion.set(.018*amplitude.value,.002*amplitude.value,phase,followPhase);
+    phase=(phase+dt*speed.value)%(Math.PI*2);
+    mesh.morphTargetInfluences[0]=amplitude.value*Math.sin(phase);
+    mesh.morphTargetInfluences[1]=amplitude.value*Math.cos(phase);
+    const mode=reducedMotion?'reduced':'active';
+    if(reportClock>=1||reportedMode!==mode){
+      reportClock=0;reportedMode=mode;
+      onMotion({mode,pose:mesh.morphTargetInfluences.map(value=>Number(value.toFixed(5)))});
+    }
   };
 }
 
@@ -203,7 +209,7 @@ export function createCatTeacher(onState=()=>{}) {
       const tailTimer=setTimeout(()=>onState('teacher-tail-error'),30000);
       import('./cat-tail-rig.js?v=gentle-tail-16').then(({default:tailRig})=>{
         clearTimeout(tailTimer);
-        updateTail=createTailMotion(bodyMeshes,tailRig);onState('teacher-tail-ready');
+        updateTail=createTailMotion(bodyMeshes,tailRig,detail=>onState('teacher-tail-motion',detail));onState('teacher-tail-ready');
       }).catch(()=>{clearTimeout(tailTimer);onState('teacher-tail-error');});
       void storeModel(download.cache,url,download.stored);
       const first=pending||(inClassroom?{kind:'welcome',direction:0}:null);pending=null;

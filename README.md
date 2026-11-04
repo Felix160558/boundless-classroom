@@ -86,3 +86,8 @@ The two home captions beneath Match and Reservation are removed. The supplied te
 ## Classroom load 17
 
 The first classroom render no longer waits for the tail weight map, GLB loader or geometry decoder. Those resources load separately after the scene starts; idle tail motion attaches after the complete teacher appears. The unchanged detailed GLB preloads at low priority so essential classroom scripts can load first. A 45-second startup notice and stalled-model download timeout replace indefinite waiting; optional-tail failures leave the teacher and classroom visible and explain the missing animation. The small tail sway has a slightly larger lateral range to remain perceptible, retaining smooth random targets, tip delay and the fixed root. Scene/app cache version is classroom-load-17; model and weight-map cache identities remain unchanged. Visual/device acceptance belongs to the owner.
+
+
+## Native tail 18
+
+The body tail now uses two native relative morph targets driven by continuous sine/cosine weights with smooth random amplitude/rate changes and delayed tip motion. This replaces the previous onBeforeCompile shader hook. Native morphs apply to the visible body, shadows and raycasting through the same renderer path as the existing facial animation. The two targets affect only the mapped tail vertices, keep the root fixed and leave the stored GLB, face, neutral positions, UVs, scale and 4K texture unchanged. Keep the lazy tail-data attachment from classroom-load-17. Read-only data-tail-motion and data-tail-pose attributes on the scene container assist with reported animation failures without adding visible controls or storing user data. Respect reduced motion. Naturalness and device acceptance remain with the owner.

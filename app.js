@@ -222,7 +222,7 @@ function fallback(message){
 const sceneStartupTimer=setTimeout(()=>{
   if(!space)fallback('三维教室资源载入较慢，可刷新重试。文字课堂和预约仍可使用。');
 },45000);
-import('./space-scene.js?v=classroom-load-17').then(async({createSpace})=>{
+import('./space-scene.js?v=native-tail-18').then(async({createSpace})=>{
   clearTimeout(sceneStartupTimer);
   space=createSpace($('#universe'),(state,detail)=>{
     if(state==='ready'){
@@ -233,6 +233,10 @@ import('./space-scene.js?v=classroom-load-17').then(async({createSpace})=>{
     }
     if(state==='teacher-progress')$('#scene-loading').lastChild.textContent=' 正在载入你的猫老师 · '+detail+'%';
     if(state==='teacher-ready')$('#scene-loading').hidden=true;
+    if(state==='teacher-tail-motion'){
+      // Read-only DOM diagnostics for a reported motion failure; no extra UI.
+      $('#universe').dataset.tailMotion=detail.mode;$('#universe').dataset.tailPose=detail.pose.join(',');
+    }
     if(state==='teacher-tail-error'){
       $('#fallback-note').textContent='猫老师已载入，尾巴动画资源暂未载入，可刷新重试。';$('#fallback-note').hidden=false;
     }
