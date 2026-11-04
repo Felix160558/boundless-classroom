@@ -1,5 +1,5 @@
 import {topics,respond} from './tutor.js';
-import {teacher} from './teacher-client.js?v=cloudflare-teacher-12';
+import {teacher} from './teacher-client.js?v=remember-access-15';
 import {renderTeacherReply,lessonNotes} from './teacher-content.js?v=gentle-board-13';
 
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
@@ -114,19 +114,27 @@ function updateConnection(){
   $('.teacher-session-actions').hidden=!teacher.configured;
   $('#chat-mode').textContent=teacher.configured?(teacher.connected?'AI · 已连接':'AI · 待连接'):'离线演示';
   $('#teacher-connect-button').hidden=!teacher.configured;
-  $('#teacher-connect-button').textContent=teacher.connected?'重新连接':'连接猫老师';
+  $('#teacher-connect-button').textContent=teacher.connected?'退出连接':'连接猫老师';
   $('#chat-reset').hidden=!teacher.configured;
   $('#chat-service-note').textContent=teacher.configured?'受邀试用 · 回复由 AI 生成，请核实重要结论':'预设教学脚本 · 尚未接入大模型';
 }
 function openTeacherConnection(){
   $('#teacher-connect-status').textContent='';connectDialog.showModal();$('#teacher-invite').focus();
 }
-$('#teacher-connect-button').addEventListener('click',openTeacherConnection);
+$('#teacher-connect-button').addEventListener('click',()=>{
+  if(teacher.connected){teacher.disconnect();activeReply?.abort();greeting();updateConnection();toast('已退出连接，并清除此浏览器记住的连接。');}
+  else openTeacherConnection();
+});
+window.addEventListener('storage',event=>{
+  if(event.key!==teacher.storageKey&&event.key!==null)return;
+  const previous=teacher.token;teacher.restore();
+  if(previous!==teacher.token){activeReply?.abort();greeting();updateConnection();}
+});
 $('#teacher-connect-close').addEventListener('click',()=>connectDialog.close());
 $('#teacher-connect-form').addEventListener('submit',async e=>{
   e.preventDefault();const input=$('#teacher-invite'),button=$('#teacher-connect-submit');
   if(!input.value.trim()||button.disabled)return;button.disabled=true;$('#teacher-connect-status').textContent='正在连接猫老师…';
-  try{await teacher.connect(input.value.trim());input.value='';connectDialog.close();updateConnection();toast('已经连接，想问什么都可以慢慢说。');}
+  try{await teacher.connect(input.value.trim());input.value='';connectDialog.close();updateConnection();toast(teacher.remembered?'已连接，此浏览器会记住连接 30 天。🐾':'已连接；此浏览器未能保存连接，刷新后需要重填邀请码。');}
   catch(error){$('#teacher-connect-status').textContent=error.message;}
   finally{button.disabled=false;}
 });
@@ -158,6 +166,7 @@ async function runTurn(turn,retry=false){
   const typing=addMessage(teacher.configured?'猫老师 · 正在想一想':'猫老师 · 准备示例中','⋯');typing.classList.add('thinking-message');
   $('#messages').setAttribute('aria-busy','true');
   activeReply=new AbortController();$('#chat-cancel').hidden=!teacher.configured;
+  const replyConnection=teacher.token;
   try{
     let answer,notes=null;
     if(teacher.configured){
@@ -170,6 +179,7 @@ async function runTurn(turn,retry=false){
     space?.greetTeacher();
     if(currentMode==='classroom')speak(answer);
   }catch(error){
+    if(teacher.configured&&teacher.token!==replyConnection){typing.remove();if(error.code==='unauthorized'){if(!input.value)input.value=turn.message;openTeacherConnection();}return;}
     typing.remove();const item=addMessage('连接提示',error.message);item.classList.add('message-error');
     if(error.code==='unauthorized')openTeacherConnection();
     else if(error.code==='expired'){
@@ -209,7 +219,7 @@ function fallback(message){
   document.body.classList.add('fallback');$('#scene-loading').hidden=true;$('#fallback-note').hidden=false;
   if(message)$('#fallback-note').textContent=message;
 }
-import('./space-scene.js?v=gentle-board-13').then(async({createSpace})=>{
+import('./space-scene.js?v=gentle-tail-16').then(async({createSpace})=>{
   space=createSpace($('#universe'),(state,detail)=>{
     if(state==='ready')$('#scene-loading').hidden=true;
     if(state==='teacher-loading'){

@@ -23,7 +23,7 @@ This snapshot connects the existing classroom to a separate Cloudflare Workers +
 
 The same classroom supports multi-turn Chinese/English dialogue, waiting, cancellation, retrying the same request and starting a new conversation. The teacher is gentle, cute and patient, with a small cat-like touch and careful scientific explanations. Model output still needs checking; there is no retrieval, laboratory tool, curriculum engine or guaranteed factual verifier. Successful deployment and a valid server-side model key are required; this source snapshot alone is not evidence of a working service.
 
-For AI dialogue, text passes through Cloudflare to DeepSeek. The gateway keeps encrypted recent context for up to two idle hours, bounded to 12 recent pairs and roughly 24KB of UTF-8 content. Expired data becomes unusable immediately and is cleaned on a schedule; provider backups have separate retention. Browser chat and the short-lived access token stay in page memory and clear on reload. The pilot is not a long-term student record. Cancellation stops waiting and attempts to abort the request; it does not guarantee that the model provider stops billing.
+For AI dialogue, text passes through Cloudflare to DeepSeek. The gateway keeps encrypted recent context for up to two idle hours, bounded to 12 recent pairs and roughly 24KB of UTF-8 content. Expired data becomes unusable immediately and is cleaned on a schedule; provider backups have separate retention. Browser chat stays in page memory and clears on reload. With the owner-requested remember-connection feature, the app access token is retained in this browser for up to 30 days; the raw invitation and provider key are never saved in browser storage. The pilot is not a long-term student record. Cancellation stops waiting and attempts to abort the request; it does not guarantee that the model provider stops billing.
 
 Optional speech is browser text-to-speech, not voice input. This static directory does not include a running backend. There is no account system, real teacher marketplace, WebRTC, multi-user XR, payment, deposit or penalty.
 
@@ -49,7 +49,7 @@ This folder is ready to publish from the repository main branch root. In Setting
 - styles.css — responsive space interface
 - app.js — navigation, local booking, teaching UI, service states and offline fallback mode
 - tutor.js — original Room 001 lesson scripts
-- teacher-client.js — provider-independent dialogue transport, memory-only access token and conversation identity
+- teacher-client.js — provider-independent dialogue transport, 30-day remembered access, explicit disconnect and memory-only conversation identity
 - teacher-config.js — public HTTPS gateway origin only; an intentionally empty origin means explicitly offline
 - space-scene.js — 3D classroom, provided teacher loading, cosmos, camera and optional single-user WebXR
 - cat-teacher.glb — original-detail teacher with a continuous smile morph and eyelid surface metadata
@@ -70,6 +70,14 @@ The two decorative arrows beside Match and Reservation are removed. Replies now 
 
 The cat teacher uses a warmer, gently playful teaching voice and returns a concise board title with up to three points in the same model call. These notes appear on the actual 3D whiteboard and stay available when entering the seated space; starting a new conversation clears them. Scientific conditions and uncertainty should remain in the summary. If an older gateway reply lacks notes, the client extracts short existing sentences without another API call. Summaries and replies can still contain model mistakes.
 
-The 22-file snapshot adds teacher-content.js, katex.mjs, katex-local.css and KATEX-LICENSE.txt. Model HTML is treated as text; the renderer creates safe DOM elements and uses KaTeX with untrusted-resource features disabled. KaTeX's original WOFF2 fonts are embedded in the local stylesheet. Retain its MIT license.
+The 23-file snapshot adds teacher-content.js, katex.mjs, katex-local.css and KATEX-LICENSE.txt. Model HTML is treated as text; the renderer creates safe DOM elements and uses KaTeX with untrusted-resource features disabled. KaTeX's original WOFF2 fonts are embedded in the local stylesheet. Retain its MIT license.
 
 Quiet-entry-14 makes each home entry underline match its own word width using an intrinsic-width inline-flex button. Keep Match and Reservation independent; do not stretch their borders to the anchor width or restore decorative arrows. The teacher/board features remain gentle-board-13 and the model cache remains fluid-cat-6.
+
+## Remember connection
+
+Enter the invitation once to remember the connection in the same browser for 30 days. Refreshing or starting a new dialogue keeps access; “退出连接” removes the saved connection, including in other open tabs. The access credential is scoped to this gateway and expires at the server-issued deadline. If browser storage is unavailable, the page says that it could not remember the connection. This remembers access, not chat transcripts. There is no new 1,000-question limit; the existing shared RMB5/day API budget remains.
+
+## Gentle tail update
+
+The two home captions beneath Match and Reservation are removed. The supplied teacher now has a subtle, continuous tail sway with slowly varying amplitude and speed. A smooth geodesic mask anchors the tail root, and the existing mesh is bent only during rendering. The original GLB, 4K texture, face, proportions and fluid-cat-6 model cache remain unchanged. There are no programmed pauses; reduced-motion preferences smoothly return the tail to rest. cat-tail-rig.js contains the small derived weight map. The owner handles visual and device acceptance.
