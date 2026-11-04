@@ -21,42 +21,51 @@ function approach(state,target,dt,tau){
 export function createTailMotion(meshes,tailRig,onMotion=()=>{}){
   const mesh=meshes.find(object=>object.geometry.attributes.position.count===tailRig.vertexCount);
   if(!mesh||tailRig.assetVersion!==VERSION)throw new Error('Tail rig does not match the teacher asset.');
-  const geometry=mesh.geometry;
-  if(geometry.morphAttributes.position?.length)throw new Error('The tail must attach only to the neutral body mesh.');
-  // Native relative morphs share the renderer's proven facial-animation path.
-  // Two quadrature poses express one travelling bend with a delayed tip.
-  const wave=new Float32Array(tailRig.vertexCount*3),follow=new Float32Array(wave.length);
+  const source=mesh.geometry;
+  if(source.morphAttributes.position?.length)throw new Error('The tail must attach only to the neutral body mesh.');
+  // Install a fresh geometry once, then update its existing position buffer.
+  // This standard BufferAttribute path also avoids adding morph layouts after a draw.
+  const geometry=source.clone(),original=source.getAttribute('position');
+  const values=new Float32Array(original.count*3);
+  for(let i=0;i<original.count;i++){values[i*3]=original.getX(i);values[i*3+1]=original.getY(i);values[i*3+2]=original.getZ(i);}
+  const position=new THREE.BufferAttribute(values,3).setUsage(THREE.DynamicDrawUsage);
+  geometry.setAttribute('position',position);mesh.geometry=geometry;source.dispose();
+  if(geometry.boundingBox)geometry.boundingBox.expandByScalar(.04);
+  if(geometry.boundingSphere)geometry.boundingSphere.radius+=.04;
+  const pivot=[.075,.07,-.075],vertices=[];
+  let first=original.count,last=0,tipIndex=0,tipWeight=-1;
   for(let i=0;i<tailRig.weights.length;i+=2){
-    const vertex=tailRig.weights[i],weight=tailRig.weights[i+1],offset=vertex*3,lag=.32*weight;
-    wave[offset]=.018*weight*Math.cos(lag);
-    follow[offset]=-.018*weight*Math.sin(lag);
-    wave[offset+2]=.002*weight*weight*Math.cos(lag+.45);
-    follow[offset+2]=-.002*weight*weight*Math.sin(lag+.45);
+    const index=tailRig.weights[i],weight=tailRig.weights[i+1],offset=index*3;
+    vertices.push({index,offset,weight,x:values[offset]-pivot[0],y:values[offset+1]-pivot[1],z:values[offset+2]-pivot[2]});
+    first=Math.min(first,index);last=Math.max(last,index);
+    if(weight>tipWeight){tipIndex=index;tipWeight=weight;}
   }
-  const waveTarget=new THREE.BufferAttribute(wave,3),followTarget=new THREE.BufferAttribute(follow,3);
-  waveTarget.name='IdleTailWave';followTarget.name='IdleTailFollow';
-  geometry.morphTargetsRelative=true;geometry.morphAttributes.position=[waveTarget,followTarget];
-  mesh.updateMorphTargets();
-  for(const material of Array.isArray(mesh.material)?mesh.material:[mesh.material])material.needsUpdate=true;
-  if(geometry.boundingBox)geometry.boundingBox.expandByScalar(.022);
-  if(geometry.boundingSphere)geometry.boundingSphere.radius+=.022;
-  const amplitude={value:0,velocity:0},speed={value:.85,velocity:0};
-  let phase=Math.random()*Math.PI*2,clock=0,nextChange=0,targetAmplitude=.55,targetSpeed=.85,reportClock=1,reportedMode;
-  function damp(state,target,dt,tau){
-    const omega=2/tau,decay=Math.exp(-omega*dt),difference=state.value-target,step=(state.velocity+omega*difference)*dt;
-    state.velocity=(state.velocity-omega*step)*decay;state.value=target+(difference+step)*decay;
-  }
-  return (dt,reducedMotion)=>{
-    clock+=dt;reportClock+=dt;
-    if(clock>=nextChange){targetAmplitude=.4+Math.random()*.45;targetSpeed=.65+Math.random()*.45;nextChange=clock+4+Math.random()*6;}
-    damp(amplitude,reducedMotion?0:targetAmplitude,dt,1.8);damp(speed,targetSpeed,dt,2.2);
-    phase=(phase+dt*speed.value)%(Math.PI*2);
-    mesh.morphTargetInfluences[0]=amplitude.value*Math.sin(phase);
-    mesh.morphTargetInfluences[1]=amplitude.value*Math.cos(phase);
+  const tipRest=[values[tipIndex*3],values[tipIndex*3+1],values[tipIndex*3+2]];
+  const seed=Math.random()*Math.PI*2,seed2=Math.random()*Math.PI*2;
+  let origin=null,lastReport=-Infinity,lastMode;
+  return (elapsedSeconds,reducedMotion=false)=>{
+    if(!Number.isFinite(elapsedSeconds))return;
+    if(origin===null)origin=elapsedSeconds;
+    const t=Math.max(0,elapsedSeconds-origin);
+    // Closed-form wall-time motion: low FPS cannot slow the cat's clock.
+    const phase=seed+.92*t+.12*Math.sin(.19*t+seed2)+.07*Math.sin(.31*t+seed);
+    const envelope=1-(1+t/.7)*Math.exp(-t/.7);
+    const amplitude=reducedMotion?0:envelope*(.65+.10*Math.sin(.17*t+seed)+.05*Math.sin(.29*t+seed2));
+    for(const vertex of vertices){
+      const {offset,weight,x,y,z}=vertex,lag=.32*weight;
+      const swing=.16*amplitude*weight*Math.sin(phase-lag);
+      const follow=.025*amplitude*weight*weight*Math.sin(phase-.45-lag);
+      const ca=Math.cos(swing),sa=Math.sin(swing),cb=Math.cos(follow),sb=Math.sin(follow);
+      const bentX=ca*x-sa*y,bentY=sa*x+ca*y;
+      values[offset]=pivot[0]+cb*bentX+sb*z;
+      values[offset+1]=pivot[1]+bentY;
+      values[offset+2]=pivot[2]-sb*bentX+cb*z;
+    }
+    position.clearUpdateRanges();position.addUpdateRange(first*3,(last-first+1)*3);position.needsUpdate=true;
     const mode=reducedMotion?'reduced':'active';
-    if(reportClock>=1||reportedMode!==mode){
-      reportClock=0;reportedMode=mode;
-      onMotion({mode,pose:mesh.morphTargetInfluences.map(value=>Number(value.toFixed(5)))});
+    if(t-lastReport>=1||lastMode!==mode){
+      lastReport=t;lastMode=mode;
+      onMotion({mode,pose:tipRest.map((value,k)=>Number((values[tipIndex*3+k]-value).toFixed(6)))});
     }
   };
 }
@@ -207,7 +216,7 @@ export function createCatTeacher(onState=()=>{}) {
       model=teacher;group.add(model);onState('teacher-ready');
       // Optional idle motion must never hold the whole classroom or model hostage.
       const tailTimer=setTimeout(()=>onState('teacher-tail-error'),30000);
-      import('./cat-tail-rig.js?v=gentle-tail-16').then(({default:tailRig})=>{
+      import('./cat-tail-rig.js?v=time-tail-19').then(({default:tailRig})=>{
         clearTimeout(tailTimer);
         updateTail=createTailMotion(bodyMeshes,tailRig,detail=>onState('teacher-tail-motion',detail));onState('teacher-tail-ready');
       }).catch(()=>{clearTimeout(tailTimer);onState('teacher-tail-error');});
@@ -224,9 +233,9 @@ export function createCatTeacher(onState=()=>{}) {
     if(!active&&pending?.kind==='welcome')pending=null;
     inClassroom=active;
   }
-  function update(dt,{reducedMotion=false,xr=false}={}){
+  function update(dt,{reducedMotion=false,xr=false,time=null}={}){
     if(!model)return;clock+=dt;
-    updateTail(dt,reducedMotion);
+    updateTail(Number.isFinite(time)?time:clock,reducedMotion);
     let warmth=0,lidLeft=0,lidRight=0,turn=0,lean=0;
     if(reaction){
       reaction.elapsed+=dt;

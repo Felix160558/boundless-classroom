@@ -1,5 +1,5 @@
 import * as THREE from './three.module.min.js';
-import {createCatTeacher} from './cat-teacher.js?v=native-tail-18';
+import {createCatTeacher} from './cat-teacher.js?v=time-tail-19';
 
 const TAU = Math.PI * 2;
 function seeded(seed=71){return()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};}
@@ -493,7 +493,7 @@ export function createSpace(container, onState=()=>{}) {
     if(hovered&&!moving&&teacherTime-hoverStarted>.65&&teacherTime-lastLook>7){
       teacher.react('look',pointerX*2);lastLook=teacherTime;hoverStarted=Infinity;
     }
-    teacher.update(dt,{reducedMotion:reduceMotion.matches,xr:renderer.xr.isPresenting});
+    teacher.update(dt,{reducedMotion:reduceMotion.matches,xr:renderer.xr.isPresenting,time:time/1000});
     if(!reduceMotion.matches&&!renderer.xr.isPresenting)skyTime.value+=dt;
     for(const layer of ribbonLayers){layer.mesh.position.y=Math.sin(skyTime.value*.06+layer.phase)*.65;layer.mesh.material.opacity=layer.opacity*(.95+.05*Math.sin(skyTime.value*.09+layer.phase));}
     glints.forEach((glint,i)=>{glint.material.opacity=.49+.10*Math.sin(skyTime.value*.42+i*2);});
