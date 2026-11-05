@@ -380,9 +380,21 @@ export function createSpace(container, onState=()=>{}) {
     return out.set(Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch)).add(seatPosition);
   }
   function pose(){
-    const portrait=container.clientWidth<650;
-    const fov=mode==='vr'?(portrait?78:66):42;
-    if(!renderer.xr.isPresenting&&camera.fov!==fov){camera.fov=fov;camera.updateProjectionMatrix();}
+    const w=container.clientWidth,h=container.clientHeight;
+    const portrait=w<650;
+    const compactClassroom=mode==='classroom'&&window.matchMedia('(max-width:600px)').matches;
+    // Retain the original teacher framing while rendering live space under the chat.
+    const visibleHeight=compactClassroom?h*.45:h;
+    const fov=mode==='vr'?(portrait?78:66):compactClassroom?
+      THREE.MathUtils.radToDeg(2*Math.atan(Math.tan(THREE.MathUtils.degToRad(42)*.5)*h/visibleHeight)):42;
+    if(!renderer.xr.isPresenting){
+      camera.fov=fov;
+      if(mode==='classroom'){
+        const panelWidth=document.querySelector('.chat-panel')?.getBoundingClientRect().width||0;
+        camera.setViewOffset(w,h,compactClassroom?0:panelWidth*.5,compactClassroom?(h-visibleHeight)*.5:0,w,h);
+      }else camera.clearViewOffset();
+      camera.updateProjectionMatrix();
+    }
     if(mode==='vr'){
       desiredPosition.copy(seatPosition);
       desiredSeatYaw=seatBaseYaw+dragX;desiredSeatPitch=THREE.MathUtils.clamp(.065+dragY,-1.25,1.25);
