@@ -1,6 +1,7 @@
 import * as THREE from './three.module.min.js';
 
-const VERSION='fluid-cat-6';
+const VERSION='refined-cat-22';
+const TOPOLOGY_VERSION='fluid-cat-6';
 const ease=x=>{const t=THREE.MathUtils.clamp(x,0,1);return t*t*t*(t*(t*6-15)+10);};
 function envelope(t,attack,hold,release){
   if(t<0)return 0;
@@ -20,7 +21,7 @@ function approach(state,target,dt,tau){
 // Geometry, original texture, head shape and character scale stay untouched.
 export function createTailMotion(meshes,tailRig,onMotion=()=>{}){
   const mesh=meshes.find(object=>object.geometry.attributes.position.count===tailRig.vertexCount);
-  if(!mesh||tailRig.assetVersion!==VERSION)throw new Error('Tail rig does not match the teacher asset.');
+  if(!mesh||tailRig.assetVersion!==TOPOLOGY_VERSION)throw new Error('Tail rig does not match the teacher asset.');
   const source=mesh.geometry;
   if(source.morphAttributes.position?.length)throw new Error('The tail must attach only to the neutral body mesh.');
   // Install a fresh geometry once, then update its existing position buffer.
@@ -41,6 +42,7 @@ export function createTailMotion(meshes,tailRig,onMotion=()=>{}){
     if(weight>tipWeight){tipIndex=index;tipWeight=weight;}
   }
   const tipRest=[values[tipIndex*3],values[tipIndex*3+1],values[tipIndex*3+2]];
+  mesh.userData.tailVertexSet=new Set(vertices.map(vertex=>vertex.index));
   const seed=Math.random()*Math.PI*2,seed2=Math.random()*Math.PI*2;
   let origin=null,lastReport=-Infinity,lastMode;
   return (elapsedSeconds,reducedMotion=false)=>{
@@ -161,7 +163,7 @@ export function createCatTeacher(onState=()=>{}) {
   const smile={value:0,velocity:0},left={value:0,velocity:0},right={value:0,velocity:0};
   let model=null,body=null,head=null,bodyMeshes=[],faceMeshes=[],reaction=null,pending=null;
   let clock=0,nextBlink=5.2,blinkStarted=-100,tapNumber=0,lastTap=-10,inClassroom=false;
-  let updateTail=()=>{};
+  let updateTail=()=>{},updateFur=()=>{};
   const meshList=node=>{const list=[];node.traverse(object=>{if(object.isMesh)list.push(object);});return list;};
   function react(kind='tap',direction=0){
     if(!model){pending={kind,direction};return;}
@@ -200,7 +202,7 @@ export function createCatTeacher(onState=()=>{}) {
         object.castShadow=true;object.receiveShadow=false;
         const convert=original=>{
           if(!materials.has(original)){
-            if(original.map)original.map.anisotropy=8;
+            if(original.map)original.map.anisotropy=16;
             materials.set(original,new THREE.MeshBasicMaterial({map:original.map,color:original.color,side:original.side,toneMapped:false}));
           }
           return materials.get(original);
@@ -216,10 +218,15 @@ export function createCatTeacher(onState=()=>{}) {
       model=teacher;group.add(model);onState('teacher-ready');
       // Optional idle motion must never hold the whole classroom or model hostage.
       const tailTimer=setTimeout(()=>onState('teacher-tail-error'),30000);
-      import('./cat-tail-rig.js?v=time-tail-19').then(({default:tailRig})=>{
+      const tailReady=import('./cat-tail-rig.js?v=time-tail-19').then(({default:tailRig})=>{
         clearTimeout(tailTimer);
         updateTail=createTailMotion(bodyMeshes,tailRig,detail=>onState('teacher-tail-motion',detail));onState('teacher-tail-ready');
       }).catch(()=>{clearTimeout(tailTimer);onState('teacher-tail-error');});
+      // Fine strands are an optional detail layer; the classroom/model render first.
+      Promise.all([tailReady,import('./cat-fur.js?v=refined-cat-22')]).then(async([,{attachFineFur}])=>{
+        updateFur=await attachFineFur(bodyMeshes[0],faceMeshes[0]);
+        onState('teacher-detail-ready');
+      }).catch(error=>{console.warn('Teacher fine fur is unavailable.',error);onState('teacher-detail-error');});
       void storeModel(download.cache,url,download.stored);
       const first=pending||(inClassroom?{kind:'welcome',direction:0}:null);pending=null;
       if(first)react(first.kind,first.direction);
@@ -250,6 +257,7 @@ export function createCatTeacher(onState=()=>{}) {
     }
     approach(smile,warmth,dt,.1);approach(left,lidLeft,dt,.035);approach(right,lidRight,dt,.035);
     for(const {mesh,index} of morphs)mesh.morphTargetInfluences[index]=smile.value;
+    updateFur();
     eyelids[0](left.value);eyelids[1](right.value);
     // The complete head retains one geometry, one fixed scale and one outline.
     group.rotation.set(lean,.25+turn,0);

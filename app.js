@@ -274,7 +274,7 @@ function fallback(message){
 const sceneStartupTimer=setTimeout(()=>{
   if(!space)fallback('三维教室资源载入较慢，可刷新重试。文字课堂和预约仍可使用。');
 },45000);
-import('./space-scene.js?v=clear-classroom-21').then(async({createSpace})=>{
+import('./space-scene.js?v=refined-cat-22').then(async({createSpace})=>{
   clearTimeout(sceneStartupTimer);
   space=createSpace($('#universe'),(state,detail)=>{
     if(state==='ready'){
@@ -285,6 +285,7 @@ import('./space-scene.js?v=clear-classroom-21').then(async({createSpace})=>{
     }
     if(state==='teacher-progress')$('#scene-loading').lastChild.textContent=' 正在载入你的猫老师 · '+detail+'%';
     if(state==='teacher-ready')$('#scene-loading').hidden=true;
+    if(state==='teacher-detail-error')toast('细毛细节暂未载入，可刷新重试；猫老师和文字课堂仍可使用。');
     if(state==='teacher-tail-motion'){
       // Read-only DOM diagnostics for a reported motion failure; no extra UI.
       $('#universe').dataset.tailMotion=detail.mode;$('#universe').dataset.tailPose=detail.pose.join(',');

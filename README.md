@@ -1,5 +1,10 @@
 # Boundless Classroom · Space Version
 
+## Refined cat 22
+
+The teacher keeps the supplied character and original vertex/morph identities with bounded surface cleanup. Its exact original 4K texture and UVs remain. cat-fur.js and cat-fur.bin add 56,000 short tapered 3D fiber ribbons on exposed fur, with camera-facing curves, soft color variation and distance fade. Clothes, the Chemistry book and the eye/glasses region are masked out. Roots follow the actual tail position buffer and existing smile deformation. The GLB alone contains the mesh cleanup; the separate runtime grooming layer is also needed for fine fibers. Model/app/scene imports and preload use refined-cat-22; tail topology compatibility remains fluid-cat-6, with time-tail-19 weights. The allowlist is 27 static files. Original baked texture defects are not all removed; no fully rebuilt glasses, book, clothing or physical hair scattering is claimed. The owner requested this model-only multiple-angle and close-up inspection; headset/device/performance acceptance is still separate. Existing UI, text AI, dictation, whiteboard, access and budget remain.
+
+
 Love, Share and Peace.
 
 A quiet classroom floating in space. A public, static learning demo built with HTML, CSS, JavaScript and a pinned local copy of Three.js 0.161.0. Visitors do not need a ChatGPT or GitHub account.
@@ -11,7 +16,7 @@ A quiet classroom floating in space. A public, static learning demo built with H
 - **Enter the VR** places you directly in the student chair, looking past your desk toward the cat teacher and whiteboard. Glass walls on both sides and a glass ceiling open onto the existing stardust universe. Drag, swipe or use arrow keys to look around from the fixed seat; there is no extra sit-down button or movement panel.
 - On a compatible HTTPS/WebXR device, an experimental single-user headset entry is offered. Its first tracked frame is aligned to the same seat, and subsequent physical head motion remains tracked. Actual headset compatibility has not been verified.
 
-The teacher uses the original supplied 3D character. This version restores the original geometry detail and exact 4096px source JPEG texture, with no mesh simplification, texture resizing or vertex quantization. The asset is 19.64 MB: visual detail and future close-up viewing take priority over a tiny first download. Local Meshopt compression remains lossless for the stored geometry. The model starts preloading when the page opens; a browser-local model cache is used when available.
+The teacher uses the original supplied 3D character. The detail refinement retains the original topology and exact 4096px source JPEG texture, with bounded surface cleanup and a separate short-fiber layer, without mesh simplification, texture resizing or vertex quantization. The asset is 19.64 MB: visual detail and future close-up viewing take priority over a tiny first download. Local Meshopt compression remains lossless for the stored geometry. The model starts preloading when the page opens; a browser-local model cache is used when available.
 
 Entering Match gradually brings out a gentle closed-mouth smile. Click or tap the teacher for a smile or wink; resting the pointer over it gives a quiet acknowledgement. One fixed head mesh is used throughout: a localized smile morph moves the mouth corners and inner cheeks, while small curved 3D eyelids gradually cover the stationary eyes. The head is never replaced or rescaled. Smooth easing and damped weights preserve continuity even when an interaction interrupts another. The classroom avatar also works as a keyboard greeting button. Reduced-motion preferences disable idle motion and automatic blinking. There is no facial tracking, lip sync or full skeleton rig.
 
