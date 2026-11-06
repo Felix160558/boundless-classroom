@@ -1,5 +1,10 @@
 # Boundless Classroom public demo
 
+## Expressive mouth 24
+
+Speech-driven lip movement is 2.2 times the previous version, with softly eased accents and occasional small openings that reveal a three-dimensional oral cavity and rounded little canines. Teeth recede with the aperture when the mouth closes. Emphasis is estimated from utterance boundaries and continuous prosody, not measured audio pitch, waveform or phoneme alignment. Preserve the supplied model, exact 4K atlas, head scale and outline, existing Smile, fine-fur attachment, tail and UI. App, scene and teacher code use expressive-mouth-24; the grooming module uses expressive-mouth-24 to clip fibers at the opening, and model/fur-data cache stays refined-cat-22. The public allowlist remains 27 files. Visual, audio and device acceptance belongs to the owner; publication status is recorded privately.
+
+
 ## Speaking cat 23
 
 The existing browser read-aloud now drives two small runtime mouth poses on the same head mesh. Playback start/resume activates continuous, softly varied articulation; word/sentence boundary events add restrained accents when supported. Pause, end, errors, cancellation, navigation and microphone entry release the mouth smoothly. This is approximate speech-cued articulation, not measured audio or phoneme alignment. The original GLB, 4K texture, head scale, face outline and all existing actions remain; the fine fibers follow every active face morph. No cloned voice, new supplier or API charge is added. App, scene, teacher code and grooming code use speaking-cat-23; model preload/cache and fine-fur data remain refined-cat-22. Visual, audio and device acceptance belongs to the owner.

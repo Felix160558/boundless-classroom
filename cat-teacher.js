@@ -17,7 +17,89 @@ function approach(state,target,dt,tau){
   state.value=THREE.MathUtils.clamp(target+(offset+step)*decay,0,1);
 }
 
-// Two restrained, local mouth poses share the original face and its texture.
+// A shallow 3D mouth pocket and small rounded canines sit inside an aperture
+// in the original muzzle. The face is never covered with a flat mouth image.
+function createOralDetail(mesh,center){
+  const aperture={value:new THREE.Vector4(center,.0805,.01,0)};
+  mesh.userData.mouthAperture=aperture;
+  const position=mesh.geometry.getAttribute('position'),surface=[];
+  for(let i=0;i<position.count;i++){
+    const x=position.getX(i),y=position.getY(i),z=position.getZ(i);
+    if(Math.abs(x-center)<.020&&y>.065&&y<.087&&z>.104&&z<.125)surface.push([x,y,z]);
+  }
+  function depth(x,y){
+    let distance=Infinity,z=.114;
+    for(const p of surface){const d=(x-p[0])**2+(y-p[1])**2;if(d<distance){distance=d;z=p[2];}}
+    return z;
+  }
+  // Native material hooks keep the current morph/skinning/texture pipeline.
+  function clip(material,inside,offset=new THREE.Vector3()){
+    const shift={value:offset};
+    material.alphaToCoverage=true;
+    material.onBeforeCompile=shader=>{
+      shader.uniforms.catAperture=aperture;shader.uniforms.catOralOffset=shift;
+      shader.vertexShader='varying vec3 vCatOral;\nuniform vec3 catOralOffset;\n'+shader.vertexShader;
+      shader.vertexShader=shader.vertexShader.replace('#include <skinning_vertex>','#include <skinning_vertex>\nvCatOral=transformed+catOralOffset;');
+      shader.fragmentShader='varying vec3 vCatOral;\nuniform vec4 catAperture;\n'+shader.fragmentShader;
+      const cut=inside
+        ? 'if(catAperture.w<.00002)discard; vec2 oral=(vCatOral.xy-catAperture.xy)/max(catAperture.zw,vec2(.00002)); float oralEdge=dot(oral,oral); diffuseColor.a*=1.-smoothstep(.965,1.015,oralEdge); if(diffuseColor.a<.005)discard;'
+        : 'if(catAperture.w>.00002&&vCatOral.z>.100){vec2 oral=(vCatOral.xy-catAperture.xy)/catAperture.zw; float oralEdge=dot(oral,oral); diffuseColor.a*=smoothstep(.965,1.015,oralEdge); if(diffuseColor.a<.005)discard;}';
+      shader.fragmentShader=shader.fragmentShader.replace('#include <clipping_planes_fragment>','#include <clipping_planes_fragment>\n'+cut);
+    };
+    material.customProgramCacheKey=()=>inside?'cat-oral-interior-24':'cat-oral-aperture-24';
+    return shift;
+  }
+  const faceMaterials=(Array.isArray(mesh.material)?mesh.material:[mesh.material]).map(material=>{
+    const copy=material.clone();clip(copy,false);return copy;
+  });
+  mesh.material=Array.isArray(mesh.material)?faceMaterials:faceMaterials[0];
+  const detail=new THREE.Group();detail.name='Small mouth cavity and canines';detail.visible=false;mesh.add(detail);
+  const segments=64,rings=10,vertices=[0,0,0],indices=[],colors=[];
+  const inner=new THREE.Color(0x30191d),outer=new THREE.Color(0x704444),color=new THREE.Color();
+  colors.push(inner.r,inner.g,inner.b);
+  for(let row=1;row<=rings;row++)for(let i=0;i<segments;i++){
+    const radius=row/rings,angle=i/segments*Math.PI*2;vertices.push(radius*Math.cos(angle),radius*Math.sin(angle),radius);
+    color.copy(inner).lerp(outer,radius**2);colors.push(color.r,color.g,color.b);
+    const index=1+(row-1)*segments+i,next=1+(row-1)*segments+(i+1)%segments;
+    if(row===1)indices.push(0,index,next);
+    else{const a=index-segments,b=next-segments;indices.push(a,index,next,a,next,b);}
+  }
+  const cup=new THREE.BufferGeometry(),shape=new Float32Array(vertices),points=new Float32Array(vertices.length);
+  cup.setAttribute('position',new THREE.BufferAttribute(points,3).setUsage(THREE.DynamicDrawUsage));
+  cup.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));cup.setIndex(indices);
+  const pocketMaterial=new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.DoubleSide,toneMapped:false});clip(pocketMaterial,true);
+  const pocket=new THREE.Mesh(cup,pocketMaterial);pocket.frustumCulled=false;detail.add(pocket);
+  const teeth=[];
+  for(const side of [-1,1]){
+    const profile=[[0,-.0030],[.00022,-.00293],[.00055,-.00255],[.00082,-.0016],[.0010,-.0005],[.00103,0],[0,.0002]].map(p=>new THREE.Vector2(...p));
+    const toothGeometry=new THREE.LatheGeometry(profile,32),x=center+side*.0053;
+    toothGeometry.rotateZ(side*-.08);toothGeometry.translate(x,.0817,depth(x,.081)-.0011);
+    const material=new THREE.MeshBasicMaterial({color:0xf2dfc2,toneMapped:false});
+    const shift=clip(material,true),tooth=new THREE.Mesh(toothGeometry,material);
+    tooth.name=side<0?'Left small canine':'Right small canine';tooth.frustumCulled=false;detail.add(tooth);teeth.push({tooth,shift});
+  }
+  // A small depth lookup is prepared once; no per-frame surface search.
+  const depthGrid=[];const grid=17;
+  for(let j=0;j<grid;j++)for(let i=0;i<grid;i++)depthGrid.push(depth(center+(i/(grid-1)*2-1)*.014,.071+j/(grid-1)*.013));
+  function sample(x,y){
+    const u=THREE.MathUtils.clamp((x-center+.014)/.028*(grid-1),0,grid-1),v=THREE.MathUtils.clamp((y-.071)/.013*(grid-1),0,grid-1);
+    const a=Math.floor(u),b=Math.floor(v),c=Math.min(grid-1,a+1),d=Math.min(grid-1,b+1);
+    return THREE.MathUtils.lerp(THREE.MathUtils.lerp(depthGrid[b*grid+a],depthGrid[b*grid+c],u-a),THREE.MathUtils.lerp(depthGrid[d*grid+a],depthGrid[d*grid+c],u-a),v-b);
+  }
+  return (amount,smile)=>{
+    const lift=.00035*smile,rx=.0065+.006*amount,ry=.0048*amount,cy=.0822+lift-ry;
+    aperture.value.set(center,cy,rx,ry);detail.visible=amount>.004;
+    if(!detail.visible)return;
+    for(let i=0;i<shape.length;i+=3){
+      const x=center+shape[i]*rx,y=cy+shape[i+1]*ry,radius=shape[i+2];
+      points[i]=x;points[i+1]=y;points[i+2]=sample(x,y-lift)-.00025-.006*(1-radius*radius);
+    }
+    cup.attributes.position.needsUpdate=true;
+    for(const {tooth,shift} of teeth){tooth.position.y=lift;shift.value.y=lift;}
+  };
+}
+
+// Two localized mouth poses share the original face and its texture.
 // Install before the first draw: eyes, nose, glasses and head outline stay fixed.
 function createSpeechMouth(mesh){
   const geometry=mesh.geometry,position=geometry.getAttribute('position');
@@ -31,10 +113,10 @@ function createSpeechMouth(mesh){
     const mask=Math.pow(Math.max(0,1-radius),3)*front;
     const lower=1-smooth(.080,.094,y),offset=i*3;
     // The lower lip/chin gently yields; no detached jaw or new mouth overlay.
-    opening[offset+1]=-.0026*mask*lower;
-    opening[offset+2]=.00028*mask*lower;
-    rounding[offset]=-.045*x*mask;
-    rounding[offset+2]=.00045*mask;
+    opening[offset+1]=-.00572*mask*lower;
+    opening[offset+2]=.000616*mask*lower;
+    rounding[offset]=-.099*x*mask;
+    rounding[offset+2]=.00099*mask;
   }
   const originalNames={...mesh.morphTargetDictionary},originalWeights=[...(mesh.morphTargetInfluences||[])];
   const targets=geometry.morphAttributes.position;
@@ -43,10 +125,11 @@ function createSpeechMouth(mesh){
   geometry.morphTargetsRelative=true;mesh.updateMorphTargets();
   mesh.morphTargetDictionary={...originalNames,SpeechOpen:openIndex,SpeechRound:roundIndex};
   originalWeights.forEach((value,index)=>{mesh.morphTargetInfluences[index]=value;});
-  const open={value:0,velocity:0},round={value:0,velocity:0};
-  let active=false,paused=false,time=0,started=0,boundary=-100,dipUntil=-100,speechText='';
+  const open={value:0,velocity:0},round={value:0,velocity:0},gape={value:0,velocity:0};
+  const oralDetail=createOralDetail(mesh,center);
+  let active=false,paused=false,time=0,started=0,boundary=-100,dipUntil=-100,speechText='',boundaryStress=0;
   function setSpeech(event={}){
-    if(event.type==='start'){active=true;paused=false;started=time;boundary=-100;dipUntil=-100;speechText=String(event.text||'');}
+    if(event.type==='start'){active=true;paused=false;started=time;boundary=-100;dipUntil=-100;boundaryStress=0;speechText=String(event.text||'');}
     else if(event.type==='stop'){active=false;paused=false;}
     else if(event.type==='pause')paused=true;
     else if(event.type==='resume'){active=true;paused=false;}
@@ -54,6 +137,8 @@ function createSpeechMouth(mesh){
       boundary=time;
       const index=Number.isFinite(event.charIndex)?event.charIndex:0;
       const before=String(event.text||speechText).slice(Math.max(0,index-3),index).trimEnd();
+      const phrase=speechText.slice(index,index+14);
+      boundaryStress=/[!！?？]|重点|关键|记住|注意|important|remember|key\b/i.test(phrase)?.85:((index*13+(speechText.charCodeAt(index)||0))%11<2?.55:.12);
       if(event.name==='sentence'||/[。！？.!?]$/.test(before))dipUntil=time+.12;
       else if(/[，,；;：:]$/.test(before))dipUntil=time+.065;
     }
@@ -65,10 +150,16 @@ function createSpeechMouth(mesh){
     const variation=.82+.12*Math.sin(2.1*t)+.06*Math.sin(4.3*t+.7);
     const onset=ease(t/.18),accent=Math.exp(-Math.max(0,time-boundary)*11);
     const dip=time<dipUntil?.25:1,level=active&&!paused?onset*(reducedMotion?.35:1)*dip:0;
+    // Web Speech exposes boundaries, not measured pitch: occasional smooth
+    // phrase swells provide a restrained fallback even without boundary events.
+    const phraseSwell=Math.pow(.5+.5*Math.sin(1.35*t+.45*Math.sin(.51*t)),8);
+    const stress=Math.max(.82*phraseSwell,boundaryStress*accent);
     approach(open,level*(.10+.52*syllable)*variation*(1+.10*accent),dt,active&&!paused?.045:.085);
     approach(round,level*.20*(.5+.5*Math.sin(2.3*t+.5)),dt,.085);
+    approach(gape,level*ease((stress-.16)/.62)*(.30+.70*syllable),dt,active&&!paused?.06:.10);
     mesh.morphTargetInfluences[openIndex]=open.value;
     mesh.morphTargetInfluences[roundIndex]=round.value;
+    oralDetail(gape.value,mesh.morphTargetInfluences[originalNames.Smile??0]||0);
   }
   return {setSpeech,update};
 }
@@ -281,7 +372,7 @@ export function createCatTeacher(onState=()=>{}) {
         updateTail=createTailMotion(bodyMeshes,tailRig,detail=>onState('teacher-tail-motion',detail));onState('teacher-tail-ready');
       }).catch(()=>{clearTimeout(tailTimer);onState('teacher-tail-error');});
       // Fine strands are an optional detail layer; the classroom/model render first.
-      Promise.all([tailReady,import('./cat-fur.js?v=speaking-cat-23')]).then(async([,{attachFineFur}])=>{
+      Promise.all([tailReady,import('./cat-fur.js?v=expressive-mouth-24')]).then(async([,{attachFineFur}])=>{
         updateFur=await attachFineFur(bodyMeshes[0],faceMeshes[0]);
         onState('teacher-detail-ready');
       }).catch(error=>{console.warn('Teacher fine fur is unavailable.',error);onState('teacher-detail-error');});

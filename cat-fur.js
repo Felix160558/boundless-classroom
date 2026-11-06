@@ -12,10 +12,12 @@ attribute float variation;
 varying vec3 vColor;
 varying vec2 vStrand;
 varying float vDistance;
+varying vec3 vSurfacePoint;
 void main(){
   float t=position.y;
   vec3 n=normalize(strandNormal),g=normalize(flow);
   vec3 curve=root+n*dimensions.x*(.68*t-.12*t*t)+g*dimensions.x*.64*t*t;
+  vSurfacePoint=curve;
   vec3 tangent=normalize(n*(.68-.24*t)+g*1.28*t);
   vec4 mv=modelViewMatrix*vec4(curve,1.);
   vec3 vt=normalize(mat3(modelViewMatrix)*tangent);
@@ -32,7 +34,14 @@ const fragmentShader=`
 varying vec3 vColor;
 varying vec2 vStrand;
 varying float vDistance;
+varying vec3 vSurfacePoint;
+uniform vec4 mouthAperture;
+uniform float oralClipping;
 void main(){
+  if(oralClipping>.5&&mouthAperture.w>.00002&&vSurfacePoint.z>.100){
+    vec2 oral=(vSurfacePoint.xy-mouthAperture.xy)/mouthAperture.zw;
+    if(dot(oral,oral)<1.)discard;
+  }
   float edge=1.-smoothstep(.42,1.,abs(vStrand.x));
   float tips=smoothstep(0.,.055,vStrand.y)*(1.-smoothstep(.72,1.,vStrand.y));
   float distanceFade=1.-smoothstep(1.35,3.4,vDistance);
@@ -105,7 +114,8 @@ function makeGroom(mesh,data,count,offset,head){
   geometry.instanceCount=count;
   geometry.boundingBox=new THREE.Box3().setFromArray(roots).expandByScalar(.002);
   geometry.boundingSphere=geometry.boundingBox.getBoundingSphere(new THREE.Sphere());
-  const material=new THREE.ShaderMaterial({vertexShader,fragmentShader,transparent:true,depthWrite:false,side:THREE.DoubleSide,toneMapped:false});
+  const uniforms={mouthAperture:mesh.userData.mouthAperture||{value:new THREE.Vector4()},oralClipping:{value:head?1:0}};
+  const material=new THREE.ShaderMaterial({vertexShader,fragmentShader,uniforms,transparent:true,depthWrite:false,side:THREE.DoubleSide,toneMapped:false});
   const fur=new THREE.Mesh(geometry,material);fur.name=head?'Face fine undercoat':'Body fine undercoat';fur.frustumCulled=false;fur.renderOrder=2;fur.userData.teacherDetail=true;mesh.add(fur);
   let previousWeights=[];
   return ()=>{
