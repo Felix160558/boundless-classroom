@@ -17,106 +17,117 @@ function approach(state,target,dt,tau){
   state.value=THREE.MathUtils.clamp(target+(offset+step)*decay,0,1);
 }
 
-// A shallow 3D mouth pocket and small rounded canines sit inside an aperture
-// in the original muzzle. The face is never covered with a flat mouth image.
-function createOralDetail(mesh,center){
-  const aperture={value:new THREE.Vector4(center,.0805,.01,0)};
-  mesh.userData.mouthAperture=aperture;
-  const position=mesh.geometry.getAttribute('position'),surface=[];
-  for(let i=0;i<position.count;i++){
-    const x=position.getX(i),y=position.getY(i),z=position.getZ(i);
-    if(Math.abs(x-center)<.020&&y>.065&&y<.087&&z>.104&&z<.125)surface.push([x,y,z]);
+// The supplied texture's real lip seam: two sloping branches below the philtrum.
+// Open the mesh at that seam, keeping original vertex IDs for the fur anchors.
+const mouthProfile={center:-.0024,width:.021,y(x){const d=x+.0024;return .08085268-.61131492*Math.abs(d)-1.65960438*d*d+.01470566*d;}};
+function splitLipSeam(mesh){
+  const geometry=mesh.geometry;
+  const attributes=Object.entries(geometry.attributes).map(([name,a])=>({name,size:a.itemSize,values:Array.from({length:a.count*a.itemSize},(_,i)=>a[['getX','getY','getZ','getW'][i%a.itemSize]](Math.floor(i/a.itemSize)))}));
+  const morphs=(geometry.morphAttributes.position||[]).map(a=>({size:3,values:Array.from({length:a.count*3},(_,i)=>a[['getX','getY','getZ'][i%3]](Math.floor(i/3)))}));
+  const pos=attributes.find(a=>a.name==='position').values;
+  const fields=[...attributes,...morphs],sides=new Map(),pairs=new Map(),index=[];
+  const sign=i=>pos[i*3+1]-mouthProfile.y(pos[i*3]);
+  function edge(a,b){
+    if(a>b)[a,b]=[b,a];const key=a+':'+b;
+    if(pairs.has(key))return pairs.get(key);
+    const fa=sign(a);let lo=0,hi=1;
+    for(let k=0;k<18;k++){
+      const t=(lo+hi)/2,x=pos[a*3]+(pos[b*3]-pos[a*3])*t,y=pos[a*3+1]+(pos[b*3+1]-pos[a*3+1])*t;
+      if((y-mouthProfile.y(x)>=0)===(fa>=0))lo=t;else hi=t;
+    }
+    const t=(lo+hi)/2,upper=pos.length/3;
+    for(const field of fields){for(let k=0;k<field.size;k++)field.values.push(field.values[a*field.size+k]*(1-t)+field.values[b*field.size+k]*t);}
+    const lower=pos.length/3;
+    for(const field of fields){for(let k=0;k<field.size;k++)field.values.push(field.values[upper*field.size+k]);}
+    sides.set(upper,1);sides.set(lower,-1);const pair={upper,lower,x:pos[upper*3]};pairs.set(key,pair);return pair;
   }
-  function depth(x,y){
-    let distance=Infinity,z=.114;
-    for(const p of surface){const d=(x-p[0])**2+(y-p[1])**2;if(d<distance){distance=d;z=p[2];}}
-    return z;
+  function part(tri,upper){
+    const polygon=[];
+    for(let i=0;i<3;i++){
+      const a=tri[i],b=tri[(i+1)%3],ina=upper?sign(a)>=0:sign(a)<0,inb=upper?sign(b)>=0:sign(b)<0;
+      if(ina)polygon.push(a);
+      if(ina!==inb){const pair=edge(a,b);polygon.push(upper?pair.upper:pair.lower);}
+    }
+    for(let i=1;i<polygon.length-1;i++)index.push(polygon[0],polygon[i],polygon[i+1]);
   }
-  // Native material hooks keep the current morph/skinning/texture pipeline.
-  function clip(material,inside,offset=new THREE.Vector3()){
-    const shift={value:offset};
-    material.alphaToCoverage=true;
-    material.onBeforeCompile=shader=>{
-      shader.uniforms.catAperture=aperture;shader.uniforms.catOralOffset=shift;
-      shader.vertexShader='varying vec3 vCatOral;\nuniform vec3 catOralOffset;\n'+shader.vertexShader;
-      shader.vertexShader=shader.vertexShader.replace('#include <skinning_vertex>','#include <skinning_vertex>\nvCatOral=transformed+catOralOffset;');
-      shader.fragmentShader='varying vec3 vCatOral;\nuniform vec4 catAperture;\n'+shader.fragmentShader;
-      const cut=inside
-        ? 'if(catAperture.w<.00002)discard; vec2 oral=(vCatOral.xy-catAperture.xy)/max(catAperture.zw,vec2(.00002)); float oralEdge=dot(oral,oral); diffuseColor.a*=1.-smoothstep(.965,1.015,oralEdge); if(diffuseColor.a<.005)discard;'
-        : 'if(catAperture.w>.00002&&vCatOral.z>.100){vec2 oral=(vCatOral.xy-catAperture.xy)/catAperture.zw; float oralEdge=dot(oral,oral); diffuseColor.a*=smoothstep(.965,1.015,oralEdge); if(diffuseColor.a<.005)discard;}';
-      shader.fragmentShader=shader.fragmentShader.replace('#include <clipping_planes_fragment>','#include <clipping_planes_fragment>\n'+cut);
-    };
-    material.customProgramCacheKey=()=>inside?'cat-oral-interior-24':'cat-oral-aperture-24';
-    return shift;
+  const original=geometry.index;
+  for(let i=0;i<original.count;i+=3){
+    const tri=[original.getX(i),original.getX(i+1),original.getX(i+2)],f=tri.map(sign);
+    const local=tri.every(v=>Math.abs(pos[v*3]-mouthProfile.center)<.030&&pos[v*3+2]>.100&&pos[v*3+2]<.126);
+    if(local&&Math.min(...f)<0&&Math.max(...f)>=0){part(tri,true);part(tri,false);}else index.push(...tri);
   }
-  const faceMaterials=(Array.isArray(mesh.material)?mesh.material:[mesh.material]).map(material=>{
-    const copy=material.clone();clip(copy,false);return copy;
-  });
-  mesh.material=Array.isArray(mesh.material)?faceMaterials:faceMaterials[0];
-  const detail=new THREE.Group();detail.name='Small mouth cavity and canines';detail.visible=false;mesh.add(detail);
-  const segments=64,rings=10,vertices=[0,0,0],indices=[],colors=[];
-  const inner=new THREE.Color(0x30191d),outer=new THREE.Color(0x704444),color=new THREE.Color();
-  colors.push(inner.r,inner.g,inner.b);
-  for(let row=1;row<=rings;row++)for(let i=0;i<segments;i++){
-    const radius=row/rings,angle=i/segments*Math.PI*2;vertices.push(radius*Math.cos(angle),radius*Math.sin(angle),radius);
-    color.copy(inner).lerp(outer,radius**2);colors.push(color.r,color.g,color.b);
-    const index=1+(row-1)*segments+i,next=1+(row-1)*segments+(i+1)%segments;
-    if(row===1)indices.push(0,index,next);
-    else{const a=index-segments,b=next-segments;indices.push(a,index,next,a,next,b);}
+  for(const a of attributes)geometry.setAttribute(a.name,new THREE.Float32BufferAttribute(a.values,a.size));
+  geometry.morphAttributes.position=morphs.map(a=>new THREE.Float32BufferAttribute(a.values,3));
+  geometry.setIndex(index);geometry.computeBoundingBox();geometry.computeBoundingSphere();
+  const seam=[...pairs.values()].filter(p=>Math.abs(p.x-mouthProfile.center)<=mouthProfile.width+.001).sort((a,b)=>a.x-b.x);
+  mesh.userData.mouthSeam=mouthProfile;
+  return {sides,seam};
+}
+
+// Interior follows the actual lip edges. The original face occludes it naturally.
+function createOralDetail(mesh,seam){
+  const detail=new THREE.Group();detail.name='Connected lips and oral lining';detail.visible=false;mesh.add(detail);
+  const segments=64,rows=12,points=new Float32Array((segments+1)*(rows+1)*3),colors=[],indices=[];
+  const inner=new THREE.Color(0x42282b),edgeColor=new THREE.Color(0x93655e),color=new THREE.Color();
+  for(let j=0;j<=rows;j++)for(let i=0;i<=segments;i++){
+    color.copy(edgeColor).lerp(inner,Math.sin(j/rows*Math.PI));colors.push(color.r,color.g,color.b);
+    if(i<segments&&j<rows){const a=j*(segments+1)+i,b=a+segments+1;indices.push(a,b,a+1,a+1,b,b+1);}
   }
-  const cup=new THREE.BufferGeometry(),shape=new Float32Array(vertices),points=new Float32Array(vertices.length);
-  cup.setAttribute('position',new THREE.BufferAttribute(points,3).setUsage(THREE.DynamicDrawUsage));
-  cup.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));cup.setIndex(indices);
-  const pocketMaterial=new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.DoubleSide,toneMapped:false});clip(pocketMaterial,true);
-  const pocket=new THREE.Mesh(cup,pocketMaterial);pocket.frustumCulled=false;detail.add(pocket);
+  const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(points,3).setUsage(THREE.DynamicDrawUsage));geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));geometry.setIndex(indices);
+  const pocket=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.DoubleSide,toneMapped:false}));pocket.frustumCulled=false;detail.add(pocket);
+  const samples=[];
+  function binding(x){
+    let k=0;while(k<seam.length-2&&seam[k+1].x<x)k++;
+    const a=seam[k],b=seam[Math.min(seam.length-1,k+1)];
+    return {a,b,t:THREE.MathUtils.clamp((x-a.x)/Math.max(.000001,b.x-a.x),0,1)};
+  }
+  for(let i=0;i<=segments;i++)samples.push(binding(mouthProfile.center+mouthProfile.width*(i/segments*2-1)));
+  const a=new THREE.Vector3(),b=new THREE.Vector3(),upper=new THREE.Vector3(),lower=new THREE.Vector3();
+  function read(bind,side,out){mesh.getVertexPosition(bind.a[side],a);mesh.getVertexPosition(bind.b[side],b);return out.copy(a).lerp(b,bind.t);}
   const teeth=[];
   for(const side of [-1,1]){
-    const profile=[[0,-.0030],[.00022,-.00293],[.00055,-.00255],[.00082,-.0016],[.0010,-.0005],[.00103,0],[0,.0002]].map(p=>new THREE.Vector2(...p));
-    const toothGeometry=new THREE.LatheGeometry(profile,32),x=center+side*.0053;
-    toothGeometry.rotateZ(side*-.08);toothGeometry.translate(x,.0817,depth(x,.081)-.0011);
-    const material=new THREE.MeshBasicMaterial({color:0xf2dfc2,toneMapped:false});
-    const shift=clip(material,true),tooth=new THREE.Mesh(toothGeometry,material);
-    tooth.name=side<0?'Left small canine':'Right small canine';tooth.frustumCulled=false;detail.add(tooth);teeth.push({tooth,shift});
+    const profile=[[0,-.0025],[.00017,-.00245],[.00043,-.00215],[.00068,-.0014],[.00086,-.0004],[.0009,0],[0,.0002]].map(p=>new THREE.Vector2(...p));
+    const toothGeometry=new THREE.LatheGeometry(profile,32);toothGeometry.rotateZ(side*-.10);
+    const tooth=new THREE.Mesh(toothGeometry,new THREE.MeshBasicMaterial({color:0xf1e0c6,toneMapped:false}));
+    tooth.name=side<0?'Left upper canine':'Right upper canine';tooth.frustumCulled=false;detail.add(tooth);teeth.push({tooth,bind:binding(mouthProfile.center+side*.007)});
   }
-  // A small depth lookup is prepared once; no per-frame surface search.
-  const depthGrid=[];const grid=17;
-  for(let j=0;j<grid;j++)for(let i=0;i<grid;i++)depthGrid.push(depth(center+(i/(grid-1)*2-1)*.014,.071+j/(grid-1)*.013));
-  function sample(x,y){
-    const u=THREE.MathUtils.clamp((x-center+.014)/.028*(grid-1),0,grid-1),v=THREE.MathUtils.clamp((y-.071)/.013*(grid-1),0,grid-1);
-    const a=Math.floor(u),b=Math.floor(v),c=Math.min(grid-1,a+1),d=Math.min(grid-1,b+1);
-    return THREE.MathUtils.lerp(THREE.MathUtils.lerp(depthGrid[b*grid+a],depthGrid[b*grid+c],u-a),THREE.MathUtils.lerp(depthGrid[d*grid+a],depthGrid[d*grid+c],u-a),v-b);
-  }
-  return (amount,smile)=>{
-    const lift=.00035*smile,rx=.0065+.006*amount,ry=.0048*amount,cy=.0822+lift-ry;
-    aperture.value.set(center,cy,rx,ry);detail.visible=amount>.004;
-    if(!detail.visible)return;
-    for(let i=0;i<shape.length;i+=3){
-      const x=center+shape[i]*rx,y=cy+shape[i+1]*ry,radius=shape[i+2];
-      points[i]=x;points[i+1]=y;points[i+2]=sample(x,y-lift)-.00025-.006*(1-radius*radius);
+  return amount=>{
+    detail.visible=amount>.004;if(!detail.visible)return;
+    for(let i=0;i<=segments;i++){
+      read(samples[i],'upper',upper);read(samples[i],'lower',lower);
+      const depth=.0065*Math.pow(Math.sin(Math.PI*i/segments),.5);
+      for(let j=0;j<=rows;j++){
+        const t=j/rows,k=(j*(segments+1)+i)*3;
+        points[k]=THREE.MathUtils.lerp(upper.x,lower.x,t);
+        points[k+1]=THREE.MathUtils.lerp(upper.y,lower.y,t);
+        points[k+2]=THREE.MathUtils.lerp(upper.z,lower.z,t)-.00012-depth*Math.sin(Math.PI*t);
+      }
     }
-    cup.attributes.position.needsUpdate=true;
-    for(const {tooth,shift} of teeth){tooth.position.y=lift;shift.value.y=lift;}
+    geometry.attributes.position.needsUpdate=true;
+    for(const {tooth,bind} of teeth){read(bind,'upper',upper);tooth.position.copy(upper);tooth.position.y+=.00065;tooth.position.z-=.0019;}
   };
 }
 
 // Two localized mouth poses share the original face and its texture.
-// Install before the first draw: eyes, nose, glasses and head outline stay fixed.
+// Install before the first draw: eyes, nose, glasses and head scale stay fixed.
 function createSpeechMouth(mesh){
+  const {sides,seam}=splitLipSeam(mesh);
   const geometry=mesh.geometry,position=geometry.getAttribute('position');
   const opening=new Float32Array(position.count*3),rounding=new Float32Array(position.count*3);
   const smooth=(a,b,x)=>{const t=THREE.MathUtils.clamp((x-a)/(b-a),0,1);return t*t*(3-2*t);};
-  const eyeRigs=mesh.userData.eyeRig;
-  const center=eyeRigs?.length===2?(eyeRigs[0].center[0]+eyeRigs[1].center[0])*.5:-.003;
+  const center=mouthProfile.center;
   for(let i=0;i<position.count;i++){
-    const x=position.getX(i)-center,y=position.getY(i),z=position.getZ(i);
-    const front=smooth(.100,.114,z),radius=(x/.030)**2+((y-.080)/.026)**2;
-    const mask=Math.pow(Math.max(0,1-radius),3)*front;
-    const lower=1-smooth(.080,.094,y),offset=i*3;
-    // The lower lip/chin gently yields; no detached jaw or new mouth overlay.
-    opening[offset+1]=-.00572*mask*lower;
-    opening[offset+2]=.000616*mask*lower;
-    rounding[offset]=-.099*x*mask;
-    rounding[offset+2]=.00099*mask;
+    const x=position.getX(i),y=position.getY(i),z=position.getZ(i),offset=i*3;
+    const below=sides.has(i)?sides.get(i)<0:y<mouthProfile.y(x);
+    const sideWeight=1-smooth(.55,1,Math.abs(x-center)/mouthProfile.width);
+    const weight=below?sideWeight*smooth(.025,.054,y)*smooth(.075,.103,z):0;
+    // A small jaw hinge carries the lower lip and chin together; corners taper.
+    const angle=.068*weight,dy=y-.052,dz=z-.030;
+    opening[offset+1]=Math.cos(angle)*dy-Math.sin(angle)*dz-dy;
+    opening[offset+2]=Math.sin(angle)*dy+Math.cos(angle)*dz-dz;
+    const radius=((x-center)/.030)**2+((y-.076)/.026)**2;
+    const mask=Math.pow(Math.max(0,1-radius),3)*smooth(.100,.114,z);
+    rounding[offset]=-.099*(x-center)*mask;rounding[offset+2]=.00099*mask;
   }
   const originalNames={...mesh.morphTargetDictionary},originalWeights=[...(mesh.morphTargetInfluences||[])];
   const targets=geometry.morphAttributes.position;
@@ -126,7 +137,7 @@ function createSpeechMouth(mesh){
   mesh.morphTargetDictionary={...originalNames,SpeechOpen:openIndex,SpeechRound:roundIndex};
   originalWeights.forEach((value,index)=>{mesh.morphTargetInfluences[index]=value;});
   const open={value:0,velocity:0},round={value:0,velocity:0},gape={value:0,velocity:0};
-  const oralDetail=createOralDetail(mesh,center);
+  const oralDetail=seam.length>1?createOralDetail(mesh,seam):()=>{};
   let active=false,paused=false,time=0,started=0,boundary=-100,dipUntil=-100,speechText='',boundaryStress=0;
   function setSpeech(event={}){
     if(event.type==='start'){active=true;paused=false;started=time;boundary=-100;dipUntil=-100;boundaryStress=0;speechText=String(event.text||'');}
@@ -157,9 +168,10 @@ function createSpeechMouth(mesh){
     approach(open,level*(.10+.52*syllable)*variation*(1+.10*accent),dt,active&&!paused?.045:.085);
     approach(round,level*.20*(.5+.5*Math.sin(2.3*t+.5)),dt,.085);
     approach(gape,level*ease((stress-.16)/.62)*(.30+.70*syllable),dt,active&&!paused?.06:.10);
-    mesh.morphTargetInfluences[openIndex]=open.value;
+    const jawAmount=Math.min(.95,open.value+.32*gape.value);
+    mesh.morphTargetInfluences[openIndex]=jawAmount;
     mesh.morphTargetInfluences[roundIndex]=round.value;
-    oralDetail(gape.value,mesh.morphTargetInfluences[originalNames.Smile??0]||0);
+    oralDetail(jawAmount);
   }
   return {setSpeech,update};
 }
@@ -372,7 +384,7 @@ export function createCatTeacher(onState=()=>{}) {
         updateTail=createTailMotion(bodyMeshes,tailRig,detail=>onState('teacher-tail-motion',detail));onState('teacher-tail-ready');
       }).catch(()=>{clearTimeout(tailTimer);onState('teacher-tail-error');});
       // Fine strands are an optional detail layer; the classroom/model render first.
-      Promise.all([tailReady,import('./cat-fur.js?v=expressive-mouth-24')]).then(async([,{attachFineFur}])=>{
+      Promise.all([tailReady,import('./cat-fur.js?v=natural-mouth-25')]).then(async([,{attachFineFur}])=>{
         updateFur=await attachFineFur(bodyMeshes[0],faceMeshes[0]);
         onState('teacher-detail-ready');
       }).catch(error=>{console.warn('Teacher fine fur is unavailable.',error);onState('teacher-detail-error');});
@@ -417,7 +429,7 @@ export function createCatTeacher(onState=()=>{}) {
     speechMouth?.update(dt,reducedMotion);
     updateFur();
     eyelids[0](left.value);eyelids[1](right.value);
-    // The complete head retains one geometry, one fixed scale and one outline.
+    // Expressions share one head geometry and its fixed scale.
     group.rotation.set(lean,.25+turn,0);
     group.position.y=.1+(!reducedMotion&&!xr?Math.sin(clock*1.5)*.002:0);
   }

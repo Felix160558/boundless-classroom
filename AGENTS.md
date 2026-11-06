@@ -1,5 +1,10 @@
 # Boundless Classroom public demo
 
+## Natural mouth 25
+
+The mouth opens along the supplied model's original lip seam through a restrained lower-jaw hinge, with soft cheek/neck blending. The small cavity spans the moving lip seam and the canines follow the upper lip. This replaces the earlier oval clipping in the face and fine-fur shaders. Original vertex identities precede appended seam vertices so the current grooming references remain attached. The same head and original GLB/4K atlas are retained without rescaling; asset/data cache stays refined-cat-22. App, scene, teacher and updated grooming modules use natural-mouth-25. Keep the existing speech lifecycle and version 24 amplitude; articulation is approximate, not measured pitch or phoneme alignment. The 27-file static allowlist, UI, tail, backend access and budget remain. Visual/audio/device acceptance belongs to the owner. Other proposed teacher gestures are a future plan only.
+
+
 ## Expressive mouth 24
 
 Speech-driven lip movement is 2.2 times the previous version, with softly eased accents and occasional small openings that reveal a three-dimensional oral cavity and rounded little canines. Teeth recede with the aperture when the mouth closes. Emphasis is estimated from utterance boundaries and continuous prosody, not measured audio pitch, waveform or phoneme alignment. Preserve the supplied model, exact 4K atlas, head scale and outline, existing Smile, fine-fur attachment, tail and UI. App, scene and teacher code use expressive-mouth-24; the grooming module uses expressive-mouth-24 to clip fibers at the opening, and model/fur-data cache stays refined-cat-22. The public allowlist remains 27 files. Visual, audio and device acceptance belongs to the owner; publication status is recorded privately.

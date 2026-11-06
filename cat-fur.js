@@ -12,12 +12,10 @@ attribute float variation;
 varying vec3 vColor;
 varying vec2 vStrand;
 varying float vDistance;
-varying vec3 vSurfacePoint;
 void main(){
   float t=position.y;
   vec3 n=normalize(strandNormal),g=normalize(flow);
   vec3 curve=root+n*dimensions.x*(.68*t-.12*t*t)+g*dimensions.x*.64*t*t;
-  vSurfacePoint=curve;
   vec3 tangent=normalize(n*(.68-.24*t)+g*1.28*t);
   vec4 mv=modelViewMatrix*vec4(curve,1.);
   vec3 vt=normalize(mat3(modelViewMatrix)*tangent);
@@ -34,14 +32,7 @@ const fragmentShader=`
 varying vec3 vColor;
 varying vec2 vStrand;
 varying float vDistance;
-varying vec3 vSurfacePoint;
-uniform vec4 mouthAperture;
-uniform float oralClipping;
 void main(){
-  if(oralClipping>.5&&mouthAperture.w>.00002&&vSurfacePoint.z>.100){
-    vec2 oral=(vSurfacePoint.xy-mouthAperture.xy)/mouthAperture.zw;
-    if(dot(oral,oral)<1.)discard;
-  }
   float edge=1.-smoothstep(.42,1.,abs(vStrand.x));
   float tips=smoothstep(0.,.055,vStrand.y)*(1.-smoothstep(.72,1.,vStrand.y));
   float distanceFade=1.-smoothstep(1.35,3.4,vDistance);
@@ -101,6 +92,13 @@ function makeGroom(mesh,data,count,offset,head){
     const p=offset+i*STRIDE,anchor={index:i,i:view.getUint32(p,true),j:view.getUint32(p+4,true),k:view.getUint32(p+8,true),u:view.getFloat32(p+12,true),v:view.getFloat32(p+16,true)};
     resolve(anchor);
     dimensions[i*2]=view.getFloat32(p+20,true)*1.65;dimensions[i*2+1]=view.getFloat32(p+24,true)*1.5;
+    // Omit only strands whose old triangle now crosses the real lip seam.
+    const seam=mesh.userData.mouthSeam;
+    if(seam&&Math.abs(point.x-seam.center)<seam.width&&point.z>.100){
+      const p=mesh.geometry.attributes.position,ids=[anchor.i,anchor.j,anchor.k];
+      const signs=ids.map(id=>p.getY(id)-seam.y(p.getX(id)));
+      if(Math.min(...signs)<0&&Math.max(...signs)>=0){dimensions[i*2]=0;dimensions[i*2+1]=0;}
+    }
     for(let k=0;k<3;k++)colors[i*3+k]=linear(view.getUint8(p+28+k)/255);
     seeds[i]=view.getUint8(p+31)/255;
     const movingFace=(mesh.geometry.morphAttributes.position||[]).some(morph=>[anchor.i,anchor.j,anchor.k].some(index=>Math.abs(morph.getX(index))+Math.abs(morph.getY(index))+Math.abs(morph.getZ(index))>1e-9));
@@ -114,8 +112,7 @@ function makeGroom(mesh,data,count,offset,head){
   geometry.instanceCount=count;
   geometry.boundingBox=new THREE.Box3().setFromArray(roots).expandByScalar(.002);
   geometry.boundingSphere=geometry.boundingBox.getBoundingSphere(new THREE.Sphere());
-  const uniforms={mouthAperture:mesh.userData.mouthAperture||{value:new THREE.Vector4()},oralClipping:{value:head?1:0}};
-  const material=new THREE.ShaderMaterial({vertexShader,fragmentShader,uniforms,transparent:true,depthWrite:false,side:THREE.DoubleSide,toneMapped:false});
+  const material=new THREE.ShaderMaterial({vertexShader,fragmentShader,transparent:true,depthWrite:false,side:THREE.DoubleSide,toneMapped:false});
   const fur=new THREE.Mesh(geometry,material);fur.name=head?'Face fine undercoat':'Body fine undercoat';fur.frustumCulled=false;fur.renderOrder=2;fur.userData.teacherDetail=true;mesh.add(fur);
   let previousWeights=[];
   return ()=>{

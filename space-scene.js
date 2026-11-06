@@ -1,5 +1,5 @@
 import * as THREE from './three.module.min.js';
-import {createCatTeacher} from './cat-teacher.js?v=expressive-mouth-24';
+import {createCatTeacher} from './cat-teacher.js?v=natural-mouth-25';
 
 const TAU = Math.PI * 2;
 function seeded(seed=71){return()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};}
