@@ -56,15 +56,18 @@ function makeGroom(mesh,data,count,offset,head){
   const point=new THREE.Vector3(),normal=new THREE.Vector3(),flow=new THREE.Vector3(),edge=new THREE.Vector3(),face=new THREE.Vector3();
   const rotation=new THREE.Quaternion();
   const initialNormal=new THREE.Vector3(),initialFlow=new THREE.Vector3(),oldFace=new THREE.Vector3();
-  function vertex(attribute,index,out,morph,weight){
+  function vertex(attribute,index,out,morphs,weights){
     out.fromBufferAttribute(attribute,index);
-    if(morph&&weight){out.x+=morph.getX(index)*weight;out.y+=morph.getY(index)*weight;out.z+=morph.getZ(index)*weight;}
+    for(let j=0;j<morphs.length;j++){
+      const morph=morphs[j],weight=weights[j]||0;
+      if(weight){out.x+=morph.getX(index)*weight;out.y+=morph.getY(index)*weight;out.z+=morph.getZ(index)*weight;}
+    }
   }
   function resolve(anchor,transport=false){
     // Always read the CURRENT geometry: tail motion installs its own dynamic buffer.
     const g=mesh.geometry,position=g.getAttribute('position'),n=g.getAttribute('normal');
-    const morph=g.morphAttributes.position?.[0],weight=mesh.morphTargetInfluences?.[0]||0;
-    vertex(position,anchor.i,a,morph,weight);vertex(position,anchor.j,b,morph,weight);vertex(position,anchor.k,c,morph,weight);
+    const morphs=g.morphAttributes.position||[],weights=mesh.morphTargetInfluences||[];
+    vertex(position,anchor.i,a,morphs,weights);vertex(position,anchor.j,b,morphs,weights);vertex(position,anchor.k,c,morphs,weights);
     point.copy(a).multiplyScalar(anchor.u).addScaledVector(b,anchor.v).addScaledVector(c,1-anchor.u-anchor.v);
     normal.copy(na.fromBufferAttribute(n,anchor.i)).multiplyScalar(anchor.u).addScaledVector(nb.fromBufferAttribute(n,anchor.j),anchor.v).addScaledVector(nc.fromBufferAttribute(n,anchor.k),1-anchor.u-anchor.v).normalize();
     face.copy(b).sub(a).cross(edge.copy(c).sub(a)).normalize();
@@ -91,8 +94,7 @@ function makeGroom(mesh,data,count,offset,head){
     dimensions[i*2]=view.getFloat32(p+20,true)*1.65;dimensions[i*2+1]=view.getFloat32(p+24,true)*1.5;
     for(let k=0;k<3;k++)colors[i*3+k]=linear(view.getUint8(p+28+k)/255);
     seeds[i]=view.getUint8(p+31)/255;
-    const morph=mesh.geometry.morphAttributes.position?.[0];
-    const movingFace=morph&&[anchor.i,anchor.j,anchor.k].some(index=>Math.abs(morph.getX(index))+Math.abs(morph.getY(index))+Math.abs(morph.getZ(index))>1e-9);
+    const movingFace=(mesh.geometry.morphAttributes.position||[]).some(morph=>[anchor.i,anchor.j,anchor.k].some(index=>Math.abs(morph.getX(index))+Math.abs(morph.getY(index))+Math.abs(morph.getZ(index))>1e-9));
     if(movingFace||tail&&[anchor.i,anchor.j,anchor.k].some(index=>tail.has(index)))anchors.push(anchor);
   }
   for(const [name,array,size] of [['root',roots,3],['strandNormal',normals,3],['flow',flows,3],['strandColor',colors,3],['dimensions',dimensions,2],['variation',seeds,1]]){
@@ -105,11 +107,11 @@ function makeGroom(mesh,data,count,offset,head){
   geometry.boundingSphere=geometry.boundingBox.getBoundingSphere(new THREE.Sphere());
   const material=new THREE.ShaderMaterial({vertexShader,fragmentShader,transparent:true,depthWrite:false,side:THREE.DoubleSide,toneMapped:false});
   const fur=new THREE.Mesh(geometry,material);fur.name=head?'Face fine undercoat':'Body fine undercoat';fur.frustumCulled=false;fur.renderOrder=2;fur.userData.teacherDetail=true;mesh.add(fur);
-  let previousWeight=-1;
+  let previousWeights=[];
   return ()=>{
-    const weight=mesh.morphTargetInfluences?.[0]||0;
-    if(!anchors.length||head&&Math.abs(weight-previousWeight)<.00001)return;
-    previousWeight=weight;
+    const weights=mesh.morphTargetInfluences||[];
+    if(!anchors.length||head&&weights.length===previousWeights.length&&weights.every((weight,index)=>Math.abs(weight-previousWeights[index])<.00001))return;
+    previousWeights=weights.slice();
     for(const anchor of anchors)resolve(anchor,true);
     for(const key of ['root','strandNormal','flow'])geometry.getAttribute(key).needsUpdate=true;
   };

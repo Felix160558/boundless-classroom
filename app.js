@@ -7,6 +7,7 @@ let space=null,topic='free',pending=false,voice=false,currentMode='home',xrSuppo
 let toastTimer=null;
 let activeReply=null;
 let dictation=null,dictationFailure='',voiceSubmit=false;
+let readAloud=null,readAloudGeneration=0;
 const lessonBoards=new Map();
 function syncBoard(){
   const notes=lessonBoards.get(topic);
@@ -25,7 +26,9 @@ const defaultSceneDescription=$('#universe').getAttribute('aria-label');
 function toast(message){const el=$('#toast');el.textContent=message;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),4000);}
 function updateMode(){
   const next=location.hash.slice(1);
+  const previousMode=currentMode;
   currentMode=['classroom','vr'].includes(next)?next:'home';
+  if(currentMode!==previousMode)cancelReadAloud();
   if(currentMode!=='classroom')dictation?.cancel();
   document.body.dataset.mode=currentMode;
   $('#home-view').hidden=currentMode!=='home';
@@ -108,6 +111,7 @@ function addMessage(who,text,mine=false,rich=false){
 }
 function teacherLabel(){return teacher.configured?'猫老师 · AI':'猫老师 · 离线示例';}
 function greeting(){
+  cancelReadAloud();
   lessonBoards.clear();syncBoard();
   $('#messages').replaceChildren();
   addMessage(teacherLabel(),'你好呀，我是猫小将。🐾\n宇宙很大，我们从一个小问题开始。\n今天想一起弄明白什么？');
@@ -122,6 +126,7 @@ function updateConnection(){
   $('#chat-service-note').textContent=teacher.configured?'受邀试用 · 回复由 AI 生成，请核实重要结论':'预设教学脚本 · 尚未接入大模型';
 }
 function openTeacherConnection(){
+  cancelReadAloud();
   dictation?.cancel();
   $('#teacher-connect-status').textContent='';connectDialog.showModal();$('#teacher-invite').focus();
 }
@@ -145,10 +150,11 @@ $('#teacher-connect-form').addEventListener('submit',async e=>{
 });
 connectDialog.addEventListener('close',()=>{$('#teacher-invite').value='';});
 $('#chat-reset').addEventListener('click',()=>{if(pending)return;dictation?.cancel();dictation?.forget();teacher.reset();greeting();toast('已开始新对话。');});
-$('#chat-cancel').addEventListener('click',()=>activeReply?.abort());
+$('#chat-cancel').addEventListener('click',()=>{cancelReadAloud();activeReply?.abort();});
 updateConnection();
 if(teacher.configured)greeting();
 $$('.subject-button').forEach(btn=>btn.addEventListener('click',()=>{
+  cancelReadAloud();
   dictation?.cancel();dictation?.forget();
   topic=btn.dataset.topic;$$('.subject-button').forEach(b=>{b.classList.toggle('active',b===btn);b.setAttribute('aria-pressed',String(b===btn));});
   $('#chat-input').placeholder=topics[topic].prompt;syncBoard();
@@ -182,27 +188,65 @@ import('./dictation.js?v=voice-input-20').then(({createDictation})=>{
 $('#dictation-button').addEventListener('click',()=>{
   if(!dictation){renderDictation({state:'error',message:dictationFailure||'语音输入正在准备，请稍后再试。'});return;}
   if(dictation.active){void dictation.stop();return;}
-  if('speechSynthesis'in window)speechSynthesis.cancel();
+  cancelReadAloud();
   dictation.start();
 });
 $('#dictation-restart').addEventListener('click',()=>{
   if(!dictation||dictation.active)return;
-  if('speechSynthesis'in window)speechSynthesis.cancel();dictation.restart();
+  cancelReadAloud();dictation.restart();
 });
 $('#chat-input').addEventListener('beforeinput',()=>{dictation?.cancel();dictation?.forget();});
 $('#chat-input').addEventListener('input',syncComposer);
-window.addEventListener('pagehide',()=>dictation?.cancel());
+window.addEventListener('pagehide',()=>{dictation?.cancel();cancelReadAloud();});
+function setTeacherSpeech(type,detail={}){space?.setTeacherSpeech?.({type,...detail});}
+function cancelReadAloud(){
+  // Invalidate first: Safari may deliver a cancelled utterance's end/error late.
+  readAloudGeneration++;readAloud=null;setTeacherSpeech('stop');
+  try{if('speechSynthesis'in window)speechSynthesis.cancel();}catch{}
+}
 function speak(text){
-  if(!voice||dictation?.active||!('speechSynthesis'in window))return;
-  try{speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(text);utterance.lang=/[\u4e00-\u9fff]/.test(text)?'zh-CN':'en-US';utterance.rate=.96;speechSynthesis.speak(utterance);}catch{toast('当前浏览器未能朗读。');}
+  cancelReadAloud();
+  if(!voice||currentMode!=='classroom'||document.hidden||dictation?.active||!('speechSynthesis'in window))return;
+  try{
+    const utterance=new SpeechSynthesisUtterance(text),generation=readAloudGeneration;
+    const take={utterance,generation,text,phase:'queued',charIndex:0,charLength:0};
+    readAloud=take; // Retain the utterance while the browser owns its playback.
+    utterance.lang=/[\u4e00-\u9fff]/.test(text)?'zh-CN':'en-US';utterance.rate=.96;
+    const current=()=>readAloud===take&&readAloudGeneration===generation;
+    const allowed=()=>voice&&currentMode==='classroom'&&!document.hidden&&!dictation?.active;
+    const finish=()=>{if(!current())return;readAloud=null;setTeacherSpeech('stop');};
+    utterance.onstart=()=>{
+      if(!current())return;if(!allowed()){cancelReadAloud();return;}
+      take.phase='speaking';setTeacherSpeech('start',{text:take.text});
+    };
+    utterance.onboundary=event=>{
+      if(!current()||take.phase!=='speaking')return;
+      if(!allowed()){cancelReadAloud();return;}
+      take.charIndex=Number.isFinite(event.charIndex)?Math.max(0,Math.min(text.length,event.charIndex)):take.charIndex;
+      take.charLength=Number.isFinite(event.charLength)?Math.max(0,event.charLength):0;
+      setTeacherSpeech('boundary',{charIndex:take.charIndex,charLength:take.charLength,name:event.name});
+    };
+    utterance.onpause=()=>{if(!current())return;take.phase='paused';setTeacherSpeech('pause');};
+    utterance.onresume=()=>{
+      if(!current())return;if(!allowed()){cancelReadAloud();return;}
+      take.phase='speaking';setTeacherSpeech('resume');
+    };
+    utterance.onend=finish;
+    utterance.onerror=event=>{
+      if(!current())return;finish();
+      if(!['canceled','interrupted'].includes(event.error))toast('当前浏览器未能朗读，可以继续使用文字。');
+    };
+    speechSynthesis.speak(utterance);
+  }catch{cancelReadAloud();toast('当前浏览器未能朗读。');}
 }
 $('#voice-btn').addEventListener('click',()=>{
   if(!('speechSynthesis'in window)){toast('当前浏览器不支持文字朗读。');return;}
   voice=!voice;$('#voice-btn').textContent='朗读：'+(voice?'开':'关');$('#voice-btn').setAttribute('aria-pressed',String(voice));
-  if(!voice)speechSynthesis.cancel();toast(voice?'下一条回复将使用浏览器朗读。':'朗读已关闭。');
+  if(!voice)cancelReadAloud();toast(voice?'下一条回复将使用浏览器朗读。':'朗读已关闭。');
 });
 async function runTurn(turn,retry=false){
   if(pending)return;
+  cancelReadAloud();
   dictation?.cancel();dictation?.forget();
   const input=$('#chat-input');pending=true;$('.send').disabled=true;$('#chat-reset').disabled=true;
   if(retry&&input.value.trim()===turn.message)input.value='';
@@ -264,7 +308,7 @@ $('#immersive-btn').addEventListener('click',async()=>{
   }catch{toast('此浏览器暂时无法进入全屏。');}
 });
 document.addEventListener('fullscreenchange',()=>{if(!xrSupported)$('#immersive-btn').innerHTML=document.fullscreenElement?'退出全屏 ⤢':'全屏 ⤢';});
-document.addEventListener('visibilitychange',()=>{if(document.hidden){dictation?.cancel();if('speechSynthesis'in window)speechSynthesis.cancel();}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){dictation?.cancel();cancelReadAloud();}});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('dialog[open]')&&currentMode!=='home'&&!document.fullscreenElement)navigate('home');});
 
 function fallback(message){
@@ -274,7 +318,7 @@ function fallback(message){
 const sceneStartupTimer=setTimeout(()=>{
   if(!space)fallback('三维教室资源载入较慢，可刷新重试。文字课堂和预约仍可使用。');
 },45000);
-import('./space-scene.js?v=refined-cat-22').then(async({createSpace})=>{
+import('./space-scene.js?v=speaking-cat-23').then(async({createSpace})=>{
   clearTimeout(sceneStartupTimer);
   space=createSpace($('#universe'),(state,detail)=>{
     if(state==='ready'){
@@ -302,6 +346,11 @@ import('./space-scene.js?v=refined-cat-22').then(async({createSpace})=>{
     if(state==='xr-start'){$('#xr-status').textContent='单人头显空间，已在课桌座位处定位。';}
     if(state==='xr-end'){$('#xr-status').textContent='课桌座位视角，拖动或方向键环视。';}
   });
+  if(readAloud&&readAloud.phase!=='queued'){
+    setTeacherSpeech('start',{text:readAloud.text});
+    setTeacherSpeech('boundary',{charIndex:readAloud.charIndex,charLength:readAloud.charLength});
+    if(readAloud.phase==='paused')setTeacherSpeech('pause');
+  }
   updateMode();xrSupported=await space.immersiveSupported();
   if(xrSupported){$('#immersive-btn').textContent='进入头显 ↗';$('#xr-status').textContent='课桌座位视角，设备支持实验性单人头显入口。';}
 }).catch(()=>{clearTimeout(sceneStartupTimer);fallback('三维教室暂未载入，请刷新重试。文字课堂和预约仍可使用。');});

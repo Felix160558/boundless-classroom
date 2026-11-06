@@ -1,5 +1,10 @@
 # Boundless Classroom public demo
 
+## Speaking cat 23
+
+The existing browser read-aloud now drives two small runtime mouth poses on the same head mesh. Playback start/resume activates continuous, softly varied articulation; word/sentence boundary events add restrained accents when supported. Pause, end, errors, cancellation, navigation and microphone entry release the mouth smoothly. This is approximate speech-cued articulation, not measured audio or phoneme alignment. The original GLB, 4K texture, head scale, face outline and all existing actions remain; the fine fibers follow every active face morph. No cloned voice, new supplier or API charge is added. App, scene, teacher code and grooming code use speaking-cat-23; model preload/cache and fine-fur data remain refined-cat-22. Visual, audio and device acceptance belongs to the owner.
+
+
 ## Refined cat 22
 
 The teacher keeps the supplied character and original vertex/morph identities with bounded surface cleanup. Its exact original 4K texture and UVs remain. cat-fur.js and cat-fur.bin add 56,000 short tapered 3D fiber ribbons on exposed fur, with camera-facing curves, soft color variation and distance fade. Clothes, the Chemistry book and the eye/glasses region are masked out. Roots follow the actual tail position buffer and existing smile deformation. The GLB alone contains the mesh cleanup; the separate runtime grooming layer is also needed for fine fibers. Model/app/scene imports and preload use refined-cat-22; tail topology compatibility remains fluid-cat-6, with time-tail-19 weights. The allowlist is 27 static files. Original baked texture defects are not all removed; no fully rebuilt glasses, book, clothing or physical hair scattering is claimed. The owner requested this model-only multiple-angle and close-up inspection; headset/device/performance acceptance is still separate. Existing UI, text AI, dictation, whiteboard, access and budget remain.

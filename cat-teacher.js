@@ -17,6 +17,62 @@ function approach(state,target,dt,tau){
   state.value=THREE.MathUtils.clamp(target+(offset+step)*decay,0,1);
 }
 
+// Two restrained, local mouth poses share the original face and its texture.
+// Install before the first draw: eyes, nose, glasses and head outline stay fixed.
+function createSpeechMouth(mesh){
+  const geometry=mesh.geometry,position=geometry.getAttribute('position');
+  const opening=new Float32Array(position.count*3),rounding=new Float32Array(position.count*3);
+  const smooth=(a,b,x)=>{const t=THREE.MathUtils.clamp((x-a)/(b-a),0,1);return t*t*(3-2*t);};
+  const eyeRigs=mesh.userData.eyeRig;
+  const center=eyeRigs?.length===2?(eyeRigs[0].center[0]+eyeRigs[1].center[0])*.5:-.003;
+  for(let i=0;i<position.count;i++){
+    const x=position.getX(i)-center,y=position.getY(i),z=position.getZ(i);
+    const front=smooth(.100,.114,z),radius=(x/.030)**2+((y-.080)/.026)**2;
+    const mask=Math.pow(Math.max(0,1-radius),3)*front;
+    const lower=1-smooth(.080,.094,y),offset=i*3;
+    // The lower lip/chin gently yields; no detached jaw or new mouth overlay.
+    opening[offset+1]=-.0026*mask*lower;
+    opening[offset+2]=.00028*mask*lower;
+    rounding[offset]=-.045*x*mask;
+    rounding[offset+2]=.00045*mask;
+  }
+  const originalNames={...mesh.morphTargetDictionary},originalWeights=[...(mesh.morphTargetInfluences||[])];
+  const targets=geometry.morphAttributes.position;
+  const openIndex=targets.length,roundIndex=openIndex+1;
+  targets.push(new THREE.BufferAttribute(opening,3),new THREE.BufferAttribute(rounding,3));
+  geometry.morphTargetsRelative=true;mesh.updateMorphTargets();
+  mesh.morphTargetDictionary={...originalNames,SpeechOpen:openIndex,SpeechRound:roundIndex};
+  originalWeights.forEach((value,index)=>{mesh.morphTargetInfluences[index]=value;});
+  const open={value:0,velocity:0},round={value:0,velocity:0};
+  let active=false,paused=false,time=0,started=0,boundary=-100,dipUntil=-100,speechText='';
+  function setSpeech(event={}){
+    if(event.type==='start'){active=true;paused=false;started=time;boundary=-100;dipUntil=-100;speechText=String(event.text||'');}
+    else if(event.type==='stop'){active=false;paused=false;}
+    else if(event.type==='pause')paused=true;
+    else if(event.type==='resume'){active=true;paused=false;}
+    else if(event.type==='boundary'&&active&&!paused){
+      boundary=time;
+      const index=Number.isFinite(event.charIndex)?event.charIndex:0;
+      const before=String(event.text||speechText).slice(Math.max(0,index-3),index).trimEnd();
+      if(event.name==='sentence'||/[。！？.!?]$/.test(before))dipUntil=time+.12;
+      else if(/[，,；;：:]$/.test(before))dipUntil=time+.065;
+    }
+  }
+  function update(dt,reducedMotion){
+    time+=dt;
+    const t=Math.max(0,time-started),phase=Math.PI*2*(3.65*t+.045*Math.sin(1.8*t)+.025*Math.sin(.73*t));
+    const syllable=Math.pow(.5-.5*Math.cos(phase),1.3);
+    const variation=.82+.12*Math.sin(2.1*t)+.06*Math.sin(4.3*t+.7);
+    const onset=ease(t/.18),accent=Math.exp(-Math.max(0,time-boundary)*11);
+    const dip=time<dipUntil?.25:1,level=active&&!paused?onset*(reducedMotion?.35:1)*dip:0;
+    approach(open,level*(.10+.52*syllable)*variation*(1+.10*accent),dt,active&&!paused?.045:.085);
+    approach(round,level*.20*(.5+.5*Math.sin(2.3*t+.5)),dt,.085);
+    mesh.morphTargetInfluences[openIndex]=open.value;
+    mesh.morphTargetInfluences[roundIndex]=round.value;
+  }
+  return {setSpeech,update};
+}
+
 // A soft, connected bend of the existing tail surface, anchored at its root.
 // Geometry, original texture, head shape and character scale stay untouched.
 export function createTailMotion(meshes,tailRig,onMotion=()=>{}){
@@ -163,7 +219,7 @@ export function createCatTeacher(onState=()=>{}) {
   const smile={value:0,velocity:0},left={value:0,velocity:0},right={value:0,velocity:0};
   let model=null,body=null,head=null,bodyMeshes=[],faceMeshes=[],reaction=null,pending=null;
   let clock=0,nextBlink=5.2,blinkStarted=-100,tapNumber=0,lastTap=-10,inClassroom=false;
-  let updateTail=()=>{},updateFur=()=>{};
+  let updateTail=()=>{},updateFur=()=>{},speechMouth=null,speechEvent=null;
   const meshList=node=>{const list=[];node.traverse(object=>{if(object.isMesh)list.push(object);});return list;};
   function react(kind='tap',direction=0){
     if(!model){pending={kind,direction};return;}
@@ -213,6 +269,8 @@ export function createCatTeacher(onState=()=>{}) {
       if(!morphs.length||head.userData.eyeRig?.length!==2)throw new Error('The continuous face rig is missing.');
       for(const original of materials.keys())original.dispose();
       bodyMeshes=meshList(body);faceMeshes=meshList(head);
+      speechMouth=createSpeechMouth(faceMeshes[0]);
+      if(speechEvent){speechMouth.setSpeech(speechEvent);if(speechEvent.paused)speechMouth.setSpeech({type:'pause'});}
       const faceMaterial=Array.isArray(faceMeshes[0].material)?faceMeshes[0].material[0]:faceMeshes[0].material;
       for(const rig of head.userData.eyeRig)eyelids.push(createEyelid(rig,faceMaterial,head));
       model=teacher;group.add(model);onState('teacher-ready');
@@ -223,7 +281,7 @@ export function createCatTeacher(onState=()=>{}) {
         updateTail=createTailMotion(bodyMeshes,tailRig,detail=>onState('teacher-tail-motion',detail));onState('teacher-tail-ready');
       }).catch(()=>{clearTimeout(tailTimer);onState('teacher-tail-error');});
       // Fine strands are an optional detail layer; the classroom/model render first.
-      Promise.all([tailReady,import('./cat-fur.js?v=refined-cat-22')]).then(async([,{attachFineFur}])=>{
+      Promise.all([tailReady,import('./cat-fur.js?v=speaking-cat-23')]).then(async([,{attachFineFur}])=>{
         updateFur=await attachFineFur(bodyMeshes[0],faceMeshes[0]);
         onState('teacher-detail-ready');
       }).catch(error=>{console.warn('Teacher fine fur is unavailable.',error);onState('teacher-detail-error');});
@@ -239,6 +297,14 @@ export function createCatTeacher(onState=()=>{}) {
     if(active&&!inClassroom)react('welcome');
     if(!active&&pending?.kind==='welcome')pending=null;
     inClassroom=active;
+    if(!active)setSpeech({type:'stop'});
+  }
+  function setSpeech(event){
+    if(event.type==='start')speechEvent={type:'start',text:event.text,paused:false};
+    else if(event.type==='stop')speechEvent=null;
+    else if(event.type==='pause'&&speechEvent)speechEvent.paused=true;
+    else if(event.type==='resume'){speechEvent=speechEvent||{type:'start'};speechEvent.paused=false;}
+    speechMouth?.setSpeech(event);
   }
   function update(dt,{reducedMotion=false,xr=false,time=null}={}){
     if(!model)return;clock+=dt;
@@ -257,6 +323,7 @@ export function createCatTeacher(onState=()=>{}) {
     }
     approach(smile,warmth,dt,.1);approach(left,lidLeft,dt,.035);approach(right,lidRight,dt,.035);
     for(const {mesh,index} of morphs)mesh.morphTargetInfluences[index]=smile.value;
+    speechMouth?.update(dt,reducedMotion);
     updateFur();
     eyelids[0](left.value);eyelids[1](right.value);
     // The complete head retains one geometry, one fixed scale and one outline.
@@ -270,5 +337,5 @@ export function createCatTeacher(onState=()=>{}) {
     if(!raycaster.ray.intersectBox(bounds,point))return false;
     return !precise||raycaster.intersectObjects([...bodyMeshes,...faceMeshes],false).length>0;
   }
-  return {group,load,react,update,hitTest,setClassroomMode};
+  return {group,load,react,update,hitTest,setClassroomMode,setSpeech};
 }

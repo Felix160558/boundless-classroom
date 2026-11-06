@@ -1,5 +1,5 @@
 import * as THREE from './three.module.min.js';
-import {createCatTeacher} from './cat-teacher.js?v=refined-cat-22';
+import {createCatTeacher} from './cat-teacher.js?v=speaking-cat-23';
 
 const TAU = Math.PI * 2;
 function seeded(seed=71){return()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};}
@@ -541,5 +541,5 @@ export function createSpace(container, onState=()=>{}) {
   }
   onState('ready');
   teacher.load();
-  return {setMode,setBoard,setLesson,resize,greetTeacher:()=>teacher.react('tap'),immersiveSupported,enterImmersive,async endImmersive(){if(session)await session.end();}};
+  return {setMode,setBoard,setLesson,resize,greetTeacher:()=>teacher.react('tap'),setTeacherSpeech:event=>teacher.setSpeech(event),immersiveSupported,enterImmersive,async endImmersive(){if(session)await session.end();}};
 }
