@@ -1,5 +1,5 @@
 import * as THREE from './three.module.min.js';
-import {createCatTeacher} from './cat-teacher.js?v=natural-mouth-25';
+import {createCatTeacher} from './cat-teacher.js?v=teacher-presence-26';
 
 const TAU = Math.PI * 2;
 function seeded(seed=71){return()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};}
@@ -505,7 +505,7 @@ export function createSpace(container, onState=()=>{}) {
     if(hovered&&!moving&&teacherTime-hoverStarted>.65&&teacherTime-lastLook>7){
       teacher.react('look',pointerX*2);lastLook=teacherTime;hoverStarted=Infinity;
     }
-    teacher.update(dt,{reducedMotion:reduceMotion.matches,xr:renderer.xr.isPresenting,time:time/1000});
+    teacher.update(dt,{reducedMotion:reduceMotion.matches,xr:mode==='vr'||renderer.xr.isPresenting,time:time/1000});
     if(!reduceMotion.matches&&!renderer.xr.isPresenting)skyTime.value+=dt;
     for(const layer of ribbonLayers){layer.mesh.position.y=Math.sin(skyTime.value*.06+layer.phase)*.65;layer.mesh.material.opacity=layer.opacity*(.95+.05*Math.sin(skyTime.value*.09+layer.phase));}
     glints.forEach((glint,i)=>{glint.material.opacity=.49+.10*Math.sin(skyTime.value*.42+i*2);});
@@ -541,5 +541,5 @@ export function createSpace(container, onState=()=>{}) {
   }
   onState('ready');
   teacher.load();
-  return {setMode,setBoard,setLesson,resize,greetTeacher:()=>teacher.react('tap'),setTeacherSpeech:event=>teacher.setSpeech(event),immersiveSupported,enterImmersive,async endImmersive(){if(session)await session.end();}};
+  return {setMode,setBoard,setLesson,resize,greetTeacher:()=>teacher.react('tap'),setTeacherSpeech:event=>teacher.setSpeech(event),setTeacherLearningState:state=>teacher.setLearningState(state),immersiveSupported,enterImmersive,async endImmersive(){if(session)await session.end();}};
 }

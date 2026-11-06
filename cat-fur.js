@@ -9,6 +9,8 @@ attribute vec3 flow;
 attribute vec3 strandColor;
 attribute vec2 dimensions;
 attribute float variation;
+attribute float headWeight;
+uniform mat4 headPose;
 varying vec3 vColor;
 varying vec2 vStrand;
 varying float vDistance;
@@ -17,6 +19,8 @@ void main(){
   vec3 n=normalize(strandNormal),g=normalize(flow);
   vec3 curve=root+n*dimensions.x*(.68*t-.12*t*t)+g*dimensions.x*.64*t*t;
   vec3 tangent=normalize(n*(.68-.24*t)+g*1.28*t);
+  curve=mix(curve,(headPose*vec4(curve,1.)).xyz,headWeight);
+  tangent=normalize(mix(tangent,mat3(headPose)*tangent,headWeight));
   vec4 mv=modelViewMatrix*vec4(curve,1.);
   vec3 vt=normalize(mat3(modelViewMatrix)*tangent);
   vec3 side=normalize(cross(vt,normalize(-mv.xyz))+vec3(.00001,0.,0.));
@@ -51,6 +55,7 @@ function makeGroom(mesh,data,count,offset,head){
   }
   geometry.setAttribute('position',new THREE.Float32BufferAttribute(strip,3));geometry.setIndex(indices);
   const roots=new Float32Array(count*3),normals=new Float32Array(count*3),flows=new Float32Array(count*3),colors=new Float32Array(count*3),dimensions=new Float32Array(count*2),seeds=new Float32Array(count);
+  const headWeights=new Float32Array(count);
   const anchors=[],tail=mesh.userData.tailVertexSet;
   const a=new THREE.Vector3(),b=new THREE.Vector3(),c=new THREE.Vector3(),na=new THREE.Vector3(),nb=new THREE.Vector3(),nc=new THREE.Vector3();
   const point=new THREE.Vector3(),normal=new THREE.Vector3(),flow=new THREE.Vector3(),edge=new THREE.Vector3(),face=new THREE.Vector3();
@@ -91,6 +96,10 @@ function makeGroom(mesh,data,count,offset,head){
   for(let i=0;i<count;i++){
     const p=offset+i*STRIDE,anchor={index:i,i:view.getUint32(p,true),j:view.getUint32(p+4,true),k:view.getUint32(p+8,true),u:view.getFloat32(p+12,true),v:view.getFloat32(p+16,true)};
     resolve(anchor);
+    if(head&&mesh.geometry.attributes.skinWeight){
+      const weights=mesh.geometry.attributes.skinWeight;
+      headWeights[i]=weights.getY(anchor.i)*anchor.u+weights.getY(anchor.j)*anchor.v+weights.getY(anchor.k)*(1-anchor.u-anchor.v);
+    }
     dimensions[i*2]=view.getFloat32(p+20,true)*1.65;dimensions[i*2+1]=view.getFloat32(p+24,true)*1.5;
     // Omit only strands whose old triangle now crosses the real lip seam.
     const seam=mesh.userData.mouthSeam;
@@ -104,7 +113,7 @@ function makeGroom(mesh,data,count,offset,head){
     const movingFace=(mesh.geometry.morphAttributes.position||[]).some(morph=>[anchor.i,anchor.j,anchor.k].some(index=>Math.abs(morph.getX(index))+Math.abs(morph.getY(index))+Math.abs(morph.getZ(index))>1e-9));
     if(movingFace||tail&&[anchor.i,anchor.j,anchor.k].some(index=>tail.has(index)))anchors.push(anchor);
   }
-  for(const [name,array,size] of [['root',roots,3],['strandNormal',normals,3],['flow',flows,3],['strandColor',colors,3],['dimensions',dimensions,2],['variation',seeds,1]]){
+  for(const [name,array,size] of [['root',roots,3],['strandNormal',normals,3],['flow',flows,3],['strandColor',colors,3],['dimensions',dimensions,2],['variation',seeds,1],['headWeight',headWeights,1]]){
     const attribute=new THREE.InstancedBufferAttribute(array,size);
     if(['root','strandNormal','flow'].includes(name))attribute.setUsage(THREE.DynamicDrawUsage);
     geometry.setAttribute(name,attribute);
@@ -112,7 +121,8 @@ function makeGroom(mesh,data,count,offset,head){
   geometry.instanceCount=count;
   geometry.boundingBox=new THREE.Box3().setFromArray(roots).expandByScalar(.002);
   geometry.boundingSphere=geometry.boundingBox.getBoundingSphere(new THREE.Sphere());
-  const material=new THREE.ShaderMaterial({vertexShader,fragmentShader,transparent:true,depthWrite:false,side:THREE.DoubleSide,toneMapped:false});
+  const uniforms={headPose:{value:mesh.userData.headPoseMatrix||new THREE.Matrix4()}};
+  const material=new THREE.ShaderMaterial({vertexShader,fragmentShader,uniforms,transparent:true,depthWrite:false,side:THREE.DoubleSide,toneMapped:false});
   const fur=new THREE.Mesh(geometry,material);fur.name=head?'Face fine undercoat':'Body fine undercoat';fur.frustumCulled=false;fur.renderOrder=2;fur.userData.teacherDetail=true;mesh.add(fur);
   let previousWeights=[];
   return ()=>{

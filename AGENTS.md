@@ -1,5 +1,9 @@
 # Boundless Classroom public demo
 
+## Teacher presence 26
+
+This version coordinates existing facial expressions with classroom states and adds restrained independent nods and head tilts. A local head/neck binding keeps the collar boundary anchored, with the face, glasses, eyelids, mouth details and fine fur following the same motion. Preserve the supplied character, original GLB/4K atlas, proportions and fixed stance; do not add whole-body bobbing, arm gestures or whiteboard pointing. Transitions remain smooth, VR motion is smaller and reduced-motion preferences are respected. There are no new AI calls or backend changes. Modules use teacher-presence-26; model/fur-data cache stays refined-cat-22. The public allowlist now includes cat-presence.js and contains 28 files. Visual/audio/device acceptance belongs to the owner; publication status is recorded privately.
+
 ## Natural mouth 25
 
 The mouth opens along the supplied model's original lip seam through a restrained lower-jaw hinge, with soft cheek/neck blending. The small cavity spans the moving lip seam and the canines follow the upper lip. This replaces the earlier oval clipping in the face and fine-fur shaders. Original vertex identities precede appended seam vertices so the current grooming references remain attached. The same head and original GLB/4K atlas are retained without rescaling; asset/data cache stays refined-cat-22. App, scene, teacher and updated grooming modules use natural-mouth-25. Keep the existing speech lifecycle and version 24 amplitude; articulation is approximate, not measured pitch or phoneme alignment. The 27-file static allowlist, UI, tail, backend access and budget remain. Visual/audio/device acceptance belongs to the owner. Other proposed teacher gestures are a future plan only.

@@ -1,4 +1,5 @@
 import * as THREE from './three.module.min.js';
+import {prepareHeadMesh,bindHead,createTeacherPresence} from './cat-presence.js?v=teacher-presence-26';
 
 const VERSION='refined-cat-22';
 const TOPOLOGY_VERSION='fluid-cat-6';
@@ -320,21 +321,16 @@ export function createCatTeacher(onState=()=>{}) {
   const bounds=new THREE.Box3(),headBounds=new THREE.Box3(),point=new THREE.Vector3();
   const materials=new Map(),morphs=[],eyelids=[];
   const smile={value:0,velocity:0},left={value:0,velocity:0},right={value:0,velocity:0};
-  let model=null,body=null,head=null,bodyMeshes=[],faceMeshes=[],reaction=null,pending=null;
-  let clock=0,nextBlink=5.2,blinkStarted=-100,tapNumber=0,lastTap=-10,inClassroom=false;
-  let updateTail=()=>{},updateFur=()=>{},speechMouth=null,speechEvent=null;
+  let model=null,body=null,head=null,bodyMeshes=[],faceMeshes=[],pending=null;
+  let clock=0,lastTap=-10,inClassroom=false;
+  let updateTail=()=>{},updateFur=()=>{},speechMouth=null,speechEvent=null,headRig=null;
+  const presence=createTeacherPresence();
   const meshList=node=>{const list=[];node.traverse(object=>{if(object.isMesh)list.push(object);});return list;};
   function react(kind='tap',direction=0){
     if(!model){pending={kind,direction};return;}
     if(kind==='tap'&&clock-lastTap<.5)return;
-    if(kind==='look'&&reaction)return;
-    if(kind==='tap'){lastTap=clock;tapNumber++;}
-    const welcome=kind==='welcome',look=kind==='look';
-    reaction={kind,direction:THREE.MathUtils.clamp(direction,-1,1),elapsed:0,
-      attack:welcome ? .65 : look ? .45 : .5,
-      hold:welcome ? .9 : look ? .45 : .75,release:welcome ? .85 : look ? .65 : .7,
-      amount:welcome ? 1 : look ? .55 : .85,wink:kind==='tap'&&tapNumber%2===1};
-    // Leave the current facial weights and their velocities untouched.
+    if(kind==='tap')lastTap=clock;
+    presence.react(kind);
   }
   async function load(){
     onState('teacher-loading');
@@ -356,6 +352,7 @@ export function createCatTeacher(onState=()=>{}) {
       const size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
       const fit=2.25/Math.max(size.y,.001);teacher.scale.setScalar(fit);
       teacher.position.set(-center.x*fit,-bounds.min.y*fit,-center.z*fit);
+      head=prepareHeadMesh(head);
       teacher.traverse(object=>{
         if(!object.isMesh)return;
         object.castShadow=true;object.receiveShadow=false;
@@ -373,9 +370,10 @@ export function createCatTeacher(onState=()=>{}) {
       for(const original of materials.keys())original.dispose();
       bodyMeshes=meshList(body);faceMeshes=meshList(head);
       speechMouth=createSpeechMouth(faceMeshes[0]);
+      headRig=bindHead(faceMeshes[0]);
       if(speechEvent){speechMouth.setSpeech(speechEvent);if(speechEvent.paused)speechMouth.setSpeech({type:'pause'});}
       const faceMaterial=Array.isArray(faceMeshes[0].material)?faceMeshes[0].material[0]:faceMeshes[0].material;
-      for(const rig of head.userData.eyeRig)eyelids.push(createEyelid(rig,faceMaterial,head));
+      for(const rig of head.userData.eyeRig)eyelids.push(createEyelid(rig,faceMaterial,headRig.attachments));
       model=teacher;group.add(model);onState('teacher-ready');
       // Optional idle motion must never hold the whole classroom or model hostage.
       const tailTimer=setTimeout(()=>onState('teacher-tail-error'),30000);
@@ -384,7 +382,7 @@ export function createCatTeacher(onState=()=>{}) {
         updateTail=createTailMotion(bodyMeshes,tailRig,detail=>onState('teacher-tail-motion',detail));onState('teacher-tail-ready');
       }).catch(()=>{clearTimeout(tailTimer);onState('teacher-tail-error');});
       // Fine strands are an optional detail layer; the classroom/model render first.
-      Promise.all([tailReady,import('./cat-fur.js?v=natural-mouth-25')]).then(async([,{attachFineFur}])=>{
+      Promise.all([tailReady,import('./cat-fur.js?v=teacher-presence-26')]).then(async([,{attachFineFur}])=>{
         updateFur=await attachFineFur(bodyMeshes[0],faceMeshes[0]);
         onState('teacher-detail-ready');
       }).catch(error=>{console.warn('Teacher fine fur is unavailable.',error);onState('teacher-detail-error');});
@@ -397,12 +395,14 @@ export function createCatTeacher(onState=()=>{}) {
     }
   }
   function setClassroomMode(active){
+    presence.setActive(active);
     if(active&&!inClassroom)react('welcome');
     if(!active&&pending?.kind==='welcome')pending=null;
     inClassroom=active;
     if(!active)setSpeech({type:'stop'});
   }
   function setSpeech(event){
+    presence.setSpeech(event);
     if(event.type==='start')speechEvent={type:'start',text:event.text,paused:false};
     else if(event.type==='stop')speechEvent=null;
     else if(event.type==='pause'&&speechEvent)speechEvent.paused=true;
@@ -412,26 +412,14 @@ export function createCatTeacher(onState=()=>{}) {
   function update(dt,{reducedMotion=false,xr=false,time=null}={}){
     if(!model)return;clock+=dt;
     updateTail(Number.isFinite(time)?time:clock,reducedMotion);
-    let warmth=0,lidLeft=0,lidRight=0,turn=0,lean=0;
-    if(reaction){
-      reaction.elapsed+=dt;
-      const e=envelope(reaction.elapsed,reaction.attack,reaction.hold,reaction.release);
-      warmth=e*reaction.amount;lidLeft=lidRight=warmth*.15;
-      if(reaction.wink)lidLeft=Math.max(lidLeft,envelope(reaction.elapsed-.5,.16,.12,.24));
-      if(!reducedMotion&&!xr){turn=e*reaction.direction*.014;lean=e*(reaction.kind==='welcome' ? .006 : 0);}
-      if(reaction.elapsed>=reaction.attack+reaction.hold+reaction.release){reaction=null;nextBlink=clock+4.5;}
-    }else if(!reducedMotion&&!xr){
-      if(clock>=nextBlink){blinkStarted=clock;nextBlink=clock+5.2+(Math.sin(clock*7)+1)*1.4;}
-      lidLeft=lidRight=envelope(clock-blinkStarted,.1,.025,.16);
-    }
-    approach(smile,warmth,dt,.1);approach(left,lidLeft,dt,.035);approach(right,lidRight,dt,.035);
+    const pose=presence.update(dt,{reducedMotion,xr});
+    approach(smile,pose.smile,dt,.12);approach(left,pose.lid,dt,.035);approach(right,pose.lid,dt,.035);
     for(const {mesh,index} of morphs)mesh.morphTargetInfluences[index]=smile.value;
+    headRig.update(pose.pitch,pose.tilt);
     speechMouth?.update(dt,reducedMotion);
     updateFur();
     eyelids[0](left.value);eyelids[1](right.value);
-    // Expressions share one head geometry and its fixed scale.
-    group.rotation.set(lean,.25+turn,0);
-    group.position.y=.1+(!reducedMotion&&!xr?Math.sin(clock*1.5)*.002:0);
+    // Feet, body and collar stay still. Only the locally bound head responds.
   }
   function hitTest(raycaster,precise=false){
     if(!model)return false;
@@ -440,5 +428,5 @@ export function createCatTeacher(onState=()=>{}) {
     if(!raycaster.ray.intersectBox(bounds,point))return false;
     return !precise||raycaster.intersectObjects([...bodyMeshes,...faceMeshes],false).length>0;
   }
-  return {group,load,react,update,hitTest,setClassroomMode,setSpeech};
+  return {group,load,react,update,hitTest,setClassroomMode,setSpeech,setLearningState:state=>presence.setState(state)};
 }
