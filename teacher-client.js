@@ -6,7 +6,7 @@ export class TeacherError extends Error {
 export class TeacherClient {
   constructor(origin='',options={}){
     this.origin='';this.token='';this.expiresAt=0;this.conversationId=null;this.remembered=false;
-    this.voiceCapability=null;this.voiceCapabilityAt=0;
+    this.voiceCapability=null;this.voiceCapabilityAt=0;this.voiceStreaming=false;this.voiceRequests=new Set();
     this.storageKey='boundless_teacher_access_v2';this.now=options.now||Date.now;
     this.fetchRequest=options.fetch||((...args)=>fetch(...args));
     try{this.storage=Object.hasOwn(options,'storage')?options.storage:globalThis.localStorage;}catch{this.storage=null;}
@@ -31,6 +31,7 @@ export class TeacherClient {
   }
   disconnect(){
     this.token='';this.expiresAt=0;this.remembered=false;this.reset();
+    for(const controller of this.voiceRequests)controller.abort();
     try{this.storage?.removeItem(this.storageKey);}catch{}
   }
   reset(){this.conversationId=null;}
@@ -64,7 +65,8 @@ export class TeacherClient {
       const result=await response.json();
       // Older gateways have no voice flag. A network error never means fallback.
       if(typeof result!=='object'||result===null)throw new Error('invalid');
-      this.voiceCapability=result.voiceConfigured===true;this.voiceCapabilityAt=this.now();return this.voiceCapability;
+      this.voiceCapability=result.voiceConfigured===true;this.voiceStreaming=this.voiceCapability&&result.voiceStreaming===true;
+      this.voiceCapabilityAt=this.now();return this.voiceCapability;
     }catch{
       throw new TeacherError(signal?.aborted?'cancelled':'voice_status',signal?.aborted?'已停止这次朗读。':'暂时无法确认语音连接，文字回答仍可使用。');
     }finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}
@@ -102,6 +104,73 @@ export class TeacherClient {
       if(controller.signal.aborted)throw new TeacherError('timeout','声音准备时间较长，文字回答已保留，请稍后再试。');
       throw new TeacherError('network','暂时无法连接语音服务，文字回答已保留。');
     }finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}
+  }
+  async speechStream(text,{signal,onChunk,requestId=crypto.randomUUID()}={}){
+    if(!this.connected)throw new TeacherError('unauthorized','请先连接猫老师，再使用专属语音。');
+    if(typeof text!=='string'||!text.trim()||[...text].length>4000)throw new TeacherError('invalid','这段文字过长，暂时无法朗读。');
+    if(typeof onChunk!=='function')throw new TeacherError('voice_error','此浏览器暂时无法播放流式声音。');
+    const controller=new AbortController(),requestToken=this.token;let reader,accessRejected=false;
+    const abort=()=>controller.abort(),cancelReader=()=>{void reader?.cancel().catch(()=>{});};
+    const ensureActive=()=>{
+      if(signal?.aborted||controller.signal.aborted||this.token!==requestToken||!this.connected)throw new TeacherError('cancelled','已停止这次朗读。');
+    };
+    signal?.addEventListener('abort',abort,{once:true});controller.signal.addEventListener('abort',cancelReader,{once:true});
+    if(signal?.aborted)abort();this.voiceRequests.add(controller);
+    const timer=setTimeout(abort,65000),maxPCM=8*1024*1024,maxEvent=512*1024,maxWire=12*1024*1024;
+    let bytes=0,wireBytes=0,complete=false,lineBuffer='',eventData='';
+    const invalid=()=>new TeacherError('voice_error','没有收到完整的声音，文字回答已保留。');
+    const consumeEvent=async()=>{
+      if(!eventData)return;
+      let event;try{event=JSON.parse(eventData);}catch{throw invalid();}eventData='';ensureActive();
+      if(!event||typeof event!=='object'||Array.isArray(event))throw invalid();
+      if(event.error)throw new TeacherError(typeof event.error.code==='string'?event.error.code:'voice_error',typeof event.error.message==='string'?event.error.message:'声音连接中断，文字回答已保留。');
+      if(event.done===true){if(!bytes||bytes%2)throw invalid();complete=true;return;}
+      const encoded=event.audio;
+      if(typeof encoded!=='string'||!encoded.length||encoded.length%4||!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded))throw invalid();
+      let binary;try{binary=atob(encoded);}catch{throw invalid();}
+      bytes+=binary.length;if(bytes>maxPCM)throw new TeacherError('voice_error','这段声音过长，文字回答已保留。');
+      const pcm=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++)pcm[i]=binary.charCodeAt(i);
+      ensureActive();await onChunk(pcm);ensureActive();
+    };
+    try{
+      if(controller.signal.aborted)ensureActive();
+      const response=await this.fetchRequest(this.origin+'/v1/speech',{method:'POST',credentials:'omit',cache:'no-store',referrerPolicy:'no-referrer',redirect:'error',signal:controller.signal,
+        headers:{'Content-Type':'application/json',Authorization:'Bearer '+requestToken},body:JSON.stringify({text,requestId,stream:true})});
+      if(!response.ok){
+        let result={};try{result=await response.json();}catch{}
+        if(response.status===401){accessRejected=true;if(this.token===requestToken)this.disconnect();}
+        throw new TeacherError(result.code||'voice_error',result.message||'专属语音暂时无法生成，文字回答已保留。');
+      }
+      if(!(response.headers.get('content-type')||'').toLowerCase().startsWith('text/event-stream')||Number(response.headers.get('content-length'))>maxWire)throw invalid();
+      reader=response.body?.getReader();if(!reader)throw invalid();ensureActive();
+      const decoder=new TextDecoder();
+      for(;;){
+        const {value,done}=await reader.read();ensureActive();
+        if(done)break;
+        wireBytes+=value.byteLength;if(wireBytes>maxWire)throw invalid();
+        lineBuffer+=decoder.decode(value,{stream:true});
+        let boundary;
+        while((boundary=lineBuffer.indexOf('\n'))!==-1){
+          let line=lineBuffer.slice(0,boundary);lineBuffer=lineBuffer.slice(boundary+1);
+          if(line.endsWith('\r'))line=line.slice(0,-1);
+          if(line.length>maxEvent)throw invalid();
+          if(!line){await consumeEvent();if(complete)break;}
+          else if(line.startsWith('data:')){eventData+=line.slice(5).replace(/^ /,'')+'\n';if(eventData.length>maxEvent)throw invalid();}
+        }
+        if(complete)break;
+        if(lineBuffer.length>maxEvent)throw invalid();
+      }
+      if(!complete)throw invalid();ensureActive();return {bytes,sampleRate:24000};
+    }catch(error){
+      if(accessRejected&&!signal?.aborted&&error instanceof TeacherError)throw error;
+      if(signal?.aborted||this.token!==requestToken)throw new TeacherError('cancelled','已停止这次朗读。');
+      if(controller.signal.aborted)throw new TeacherError('timeout','声音连接等待较长，文字回答已保留，请稍后再试。');
+      if(error instanceof TeacherError)throw error;
+      throw new TeacherError('network','声音连接暂时中断，文字回答已保留。');
+    }finally{
+      clearTimeout(timer);this.voiceRequests.delete(controller);signal?.removeEventListener('abort',abort);controller.signal.removeEventListener('abort',cancelReader);
+      void reader?.cancel().catch(()=>{});controller.abort();
+    }
   }
   async connect(invite){
     const result=await this.request('/api/session',{invite});

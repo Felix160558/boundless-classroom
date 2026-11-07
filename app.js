@@ -1,6 +1,6 @@
 import {topics,respond} from './tutor.js';
-import {teacher} from './teacher-client.js?v=cat-voice-27';
-import {createTeacherVoice} from './teacher-voice.js?v=cat-voice-27';
+import {teacher} from './teacher-client.js?v=smooth-voice-28';
+import {createTeacherVoice} from './teacher-voice.js?v=smooth-voice-28';
 import {renderTeacherReply,lessonNotes} from './teacher-content.js?v=gentle-board-13';
 
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
@@ -271,7 +271,8 @@ function renderVoiceControl(){
     voiceSource==='system'?'专属音色尚未配置，当前使用浏览器系统朗读':
     '记住朗读偏好；开启后自动朗读后续回答，点击可关闭';
 }
-cloudVoice=createTeacherVoice({synthesize:(text,options)=>teacher.speech(text,options),isAllowed:voiceAllowed,
+cloudVoice=createTeacherVoice({synthesize:(text,options)=>teacher.speech(text,options),
+  synthesizeStream:(text,options)=>teacher.speechStream(text,options),canStream:()=>teacher.voiceStreaming===true,isAllowed:voiceAllowed,
   onSpeech:setTeacherSpeech,onState:(state,message)=>{
     renderVoiceControl();if(message)toast(message);if(state==='error')updateConnection();
   }});
@@ -315,6 +316,9 @@ async function runTurn(turn,retry=false){
   const typing=addMessage(teacher.configured?'猫老师 · 正在想一想':'猫老师 · 准备示例中','⋯');typing.classList.add('thinking-message');
   $('#messages').setAttribute('aria-busy','true');
   activeReply=new AbortController();$('#chat-cancel').hidden=!teacher.configured;syncTeacherLearningState();
+  // Check voice availability while the text answer is being generated, not after it.
+  // This only reads configuration; it never synthesizes or incurs model fees.
+  if(voice&&teacher.connected)void teacher.voiceStatus({signal:activeReply.signal}).catch(()=>{});
   const replyConnection=teacher.token;
   try{
     let answer,notes=null;
@@ -337,7 +341,13 @@ async function runTurn(turn,retry=false){
     else if(error.code==='expired'){
       const fresh=document.createElement('button');fresh.type='button';fresh.className='retry-message';fresh.textContent='开始新对话';fresh.addEventListener('click',()=>{if(pending)return;teacher.reset();greeting();input.value=turn.message;});item.append(fresh);
     }else if(!['daily_limit','duplicate','invalid','cancelled'].includes(error.code)){
-      const again=document.createElement('button');again.type='button';again.className='retry-message';again.textContent='重试';again.addEventListener('click',()=>{item.remove();runTurn(turn,true);});item.append(again);
+      const again=document.createElement('button');again.type='button';again.className='retry-message';again.textContent='重试';again.addEventListener('click',()=>{
+        item.remove();
+        // A confirmed provider failure is finished: an explicit retry needs a new ID.
+        // Uncertain network failures keep the old ID to recover a result without double billing.
+        const retryTurn=['empty_reply','provider_error','provider_busy','provider_config'].includes(error.code)?{...turn,requestId:crypto.randomUUID()}:turn;
+        runTurn(retryTurn,true);
+      });item.append(again);
     }
     if(!input.value)input.value=turn.message;
   }finally{

@@ -1,5 +1,9 @@
 # Boundless Classroom public demo
 
+## Smooth voice 28
+
+Preserves the existing classroom and cloned voice. Supports opt-in PCM streaming from the authenticated gateway so playback can begin before the full answer audio arrives. One synthesis request is made per answer; cancellation and manual Safari resume never start a replacement paid request. Older gateways or browsers without WebAudio retain the complete MP3 path. The voice capability check starts while the text response is being prepared. Real latency, audio and device acceptance remain with the owner.
+
 ## Cat voice 27
 
 Adds an optional invited voice gateway and remembered read-aloud preference. CosyVoice credentials and the selected voice live only on the existing backend; the public files contain no original recording or provider key. Audio playback coordinates with the existing teacher mouth animation and cancels on navigation, interruption or microphone use. The original character, classroom and teacher-presence-26 motions remain. Provider configuration and successful playback are required before calling the clone connected; unconfigured gateway operation remains explicitly browser read-aloud. The owner handles visual/audio/device acceptance. This static snapshot contains 29 files; model cache stays refined-cat-22.
