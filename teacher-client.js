@@ -35,7 +35,12 @@ export class TeacherClient {
     try{this.storage?.removeItem(this.storageKey);}catch{}
   }
   reset(){this.conversationId=null;}
-  turn(message,topic){return {message,topic,conversationId:this.conversationId,requestId:crypto.randomUUID()};}
+  turn(message,topic,attachments=[]){
+    // Snapshot only the allowed attachment fields so editing the next draft
+    // cannot mutate an in-flight or explicitly retried question.
+    const images=attachments.map(({name,mime,data})=>({name,mime,data}));
+    return {message,topic,conversationId:this.conversationId,requestId:crypto.randomUUID(),...(images.length?{attachments:images}:{})};
+  }
   async request(path,data,signal){
     if(!this.configured)throw new TeacherError('unconfigured','AI 猫老师尚未开放。');
     const controller=new AbortController(),abort=()=>controller.abort();
@@ -52,6 +57,14 @@ export class TeacherClient {
       if(error instanceof TeacherError)throw error;
       throw new TeacherError('network','暂时无法连接猫老师，请检查网络后重试。');
     }finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}
+  }
+  async transcribe(audio,{signal,requestId=crypto.randomUUID()}={}){
+    if(!this.connected)throw new TeacherError('unauthorized','请先连接猫老师，再使用语音输入。');
+    const token=this.token;
+    const result=await this.request('/v1/transcribe',{audio,requestId},signal);
+    if(this.token!==token||signal?.aborted)throw new TeacherError('cancelled','已停止这次语音输入。');
+    if(typeof result?.text!=='string'||result.text.length>4000)throw new TeacherError('asr_error','没有收到可用的语音文字，请重试。');
+    return result;
   }
   async voiceStatus({signal,refresh=false}={}){
     if(!this.configured)return false;

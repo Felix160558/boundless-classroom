@@ -8,12 +8,12 @@
   <title>Boundless Classroom · Space Version</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23080c12'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-size='46' fill='%23f3f0e8'%3E∞%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="./katex-local.css">
-  <link rel="stylesheet" href="./styles.css?v=bilingual-input-32">
+  <link rel="stylesheet" href="./styles.css?v=quiet-input-33">
   <link rel="preload" as="fetch" href="./cat-teacher.glb?v=refined-cat-22" crossorigin="anonymous" fetchpriority="low">
   <link rel="modulepreload" href="./space-scene.js?v=quiet-shape-31">
   <link rel="modulepreload" href="./three.module.min.js">
   <link rel="modulepreload" href="./meshopt_decoder.mjs">
-  <script type="module" src="./app.js?v=bilingual-input-32"></script>
+  <script type="module" src="./app.js?v=quiet-input-33"></script>
 </head>
 <body data-mode="home">
   <div class="cosmos-fallback" aria-hidden="true"><div class="fallback-platform"></div></div>
@@ -66,11 +66,20 @@
 宇宙很大，我们从一个小问题开始。
 今天想一起弄明白什么？</div></div></div>
         <form id="chat-form" class="compose">
+          <div class="attachment-previews" id="attachment-previews" hidden></div>
+          <div class="pdf-selection" id="pdf-selection" hidden>
+            <p id="pdf-name"></p><span id="pdf-pages"></span>
+            <div><input id="pdf-page-range" type="text" inputmode="text" aria-label="选择 PDF 页码，例如 1、3 或 1-3" placeholder="1, 3 或 1-3"><button id="pdf-add-pages" type="button">添加所选页</button><button id="pdf-cancel" type="button" aria-label="取消 PDF">×</button></div>
+          </div>
+          <div class="attachment-progress" id="attachment-progress" hidden><p id="attachment-status" role="status" aria-live="polite"></p><button id="attachment-cancel" type="button">取消</button></div>
+          <p class="attachment-privacy" id="attachment-privacy" hidden>所选图片／PDF 页面将发送给 DeepSeek 识别 · 图片临时保留 2 小时</p>
           <div class="composer-shell">
-            <textarea id="chat-input" aria-label="向猫老师提问" placeholder="今天想弄明白什么？" maxlength="4000" rows="2" autocomplete="off" required></textarea>
+            <input id="attachment-file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.pdf" multiple hidden>
+            <button id="attachment-button" class="attachment-button" type="button" aria-label="添加图片或 PDF" title="添加图片或 PDF">＋</button>
+            <textarea id="chat-input" aria-label="向猫老师提问" placeholder="今天想弄明白什么？" maxlength="4000" rows="2" autocomplete="off"></textarea>
             <div class="composer-actions">
               <button type="button" id="chat-cancel" class="chat-cancel" hidden aria-label="停止等待回复">停止</button>
-              <button type="button" id="dictation-button" class="mic-button" aria-label="语音输入" aria-pressed="false" title="语音输入 · 由浏览器识别，确认文字后再发送" disabled>
+              <button type="button" id="dictation-button" class="mic-button" aria-label="语音输入 · 自动识别中英文" aria-pressed="false" title="中英自动识别 · 停顿后转文字，录音发送至阿里云识别" disabled>
                 <svg class="mic-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5.5 10.5v1a6.5 6.5 0 0 0 13 0v-1M12 18v3m-3 0h6"/></svg>
                 <svg class="mic-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="7.5" y="7.5" width="9" height="9" rx="2"/></svg>
               </button>
@@ -83,10 +92,6 @@
             <button type="button" id="dictation-restart" hidden>重新录入</button>
           </div>
           <div class="compose-footer">
-            <div class="dictation-languages" role="group" aria-label="语音识别语言 / Speech recognition language">
-              <button type="button" data-dictation-language="zh-CN" aria-pressed="false" lang="zh-CN" title="用中文进行语音输入">中文</button>
-              <button type="button" data-dictation-language="en-US" aria-pressed="false" lang="en" title="Dictate in English">English</button>
-            </div>
             <button id="voice-btn" type="button" aria-pressed="false">朗读：关</button>
             <p id="chat-service-note">预设教学脚本 · 尚未接入大模型</p>
           </div>
@@ -120,7 +125,7 @@
     <div class="dialog-top"><span class="eyebrow">CAT TEACHER / EARLY ACCESS</span><button type="button" class="close-button" id="teacher-connect-close" aria-label="关闭连接窗口">×</button></div>
     <div class="booking-intro"><h2 id="teacher-connect-title">和猫老师聊一聊。</h2><p>输入邀请码，此浏览器会记住连接 30 天。<br>随时可以退出连接。</p></div>
     <form id="teacher-connect-form">
-      <label class="field"><span>试用邀请码</span><input id="teacher-invite" type="password" maxlength="256" autocomplete="off" required></label>
+      <label class="field"><span>试用邀请码</span><input id="teacher-invite" type="password" maxlength="256" autocomplete="off"></label>
       <p class="booking-notice">连接后，你的提问及本次对话的必要上下文会发送给 DeepSeek 生成回答。不要输入密码或其他敏感资料。猫老师可能会出错，重要结论请核实。</p>
       <p id="teacher-connect-status" class="connection-status" role="status" aria-live="polite"></p>
       <div class="booking-actions"><button type="submit" id="teacher-connect-submit" class="solid-button">连接猫老师 <span aria-hidden="true">↗</span></button></div>

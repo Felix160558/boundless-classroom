@@ -1,5 +1,14 @@
 # Boundless Classroom · Space Version
 
+## Quiet input 33
+
+The composer uses one microphone with automatic Chinese/English transcription and one leftmost plus icon for images/PDF. No manual language buttons. A pause or Stop ends the recording; text remains editable before Send. Audio is transcribed through the invited gateway, not guessed from browser language. Recording is bounded to 60 seconds; actual recognition accuracy and device acceptance are owner-reviewed.
+
+Images/PDF can be chosen, pasted or dropped. PDF rendering is local; choose up to three pages/images per question. Only selected images are sent when Send is pressed. DeepSeek image references expire in two hours; follow-up context is bounded. Existing invited access, short-lived encrypted context and shared RMB5 daily admission cover dialogue, voice and transcription. No credentials or user-uploaded assets are in this public repository.
+
+PDF.js 6.5.438 is lazy-loaded locally with its Apache-2.0 license. The site remains native HTML/CSS/ESM, with the original teacher and classroom. This release is prepared locally; publication status is recorded by the maintainer.
+
+
 ## Bilingual input 32 · 2026-11-07
 
 Dictation offers equal Chinese / English controls, persists the explicit choice, and uses browser language preferences on first use. Remove the draft-text heuristic: an empty or Chinese draft must not force an English recording through zh-CN. Each recording freezes its language; switching stops the old take and preserves editable text, without auto-starting the microphone. Keep the Safari user gesture, restart and late-event isolation. English recording feedback uses English. Browser Web Speech still uses one recognition language per take, not guaranteed automatic bilingual detection.
