@@ -8,12 +8,12 @@
   <title>Boundless Classroom · Space Version</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23080c12'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-size='46' fill='%23f3f0e8'%3E∞%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="./katex-local.css">
-  <link rel="stylesheet" href="./styles.css?v=molecular-classroom-29">
+  <link rel="stylesheet" href="./styles.css?v=all-subject-30">
   <link rel="preload" as="fetch" href="./cat-teacher.glb?v=refined-cat-22" crossorigin="anonymous" fetchpriority="low">
-  <link rel="modulepreload" href="./space-scene.js?v=molecular-classroom-29">
+  <link rel="modulepreload" href="./space-scene.js?v=all-subject-30">
   <link rel="modulepreload" href="./three.module.min.js">
   <link rel="modulepreload" href="./meshopt_decoder.mjs">
-  <script type="module" src="./app.js?v=molecular-classroom-29"></script>
+  <script type="module" src="./app.js?v=all-subject-30"></script>
 </head>
 <body data-mode="home">
   <div class="cosmos-fallback" aria-hidden="true"><div class="fallback-platform"></div></div>
@@ -57,27 +57,14 @@
             <svg viewBox="15 8 116 129" aria-hidden="true"><image href="./teacher-portrait.png?v=clear-classroom-21" width="408" height="138"/></svg>
           </button>
           <div class="teacher-intro">
-            <div class="teacher-title-row"><h2 id="chat-title">猫老师</h2><span class="teacher-role"><svg viewBox="0 0 18 18" aria-hidden="true"><path d="m8 1 1.9 5.1L15 8l-5.1 1.9L8 15l-1.9-5.1L1 8l5.1-1.9ZM14 12l.8 2.2L17 15l-2.2.8L14 18l-.8-2.2L11 15l2.2-.8Z"/></svg>AI 助教</span></div>
+            <div class="teacher-title-row"><h2 id="chat-title">猫老师</h2><span class="teacher-role"><svg viewBox="0 0 18 18" aria-hidden="true"><path d="m8 1 1.9 5.1L15 8l-5.1 1.9L8 15l-1.9-5.1L1 8l5.1-1.9ZM14 12l.8 2.2L17 15l-2.2.8L14 18l-.8-2.2L11 15l2.2-.8Z"/></svg>AI · 全科</span></div>
             <p>好奇心，永远被欢迎。</p>
           </div>
         </div>
         <div class="teacher-session-actions"><span id="chat-mode" class="connection-indicator" role="status">离线演示</span><button type="button" id="teacher-connect-button" hidden>连接猫老师</button><button type="button" id="chat-reset" hidden>新对话</button></div>
-        <div class="subject-tabs" role="group" aria-label="试学主题">
-          <button data-topic="free" class="subject-button active" aria-pressed="true">自由提问</button>
-          <button data-topic="chem" class="subject-button" aria-pressed="false">化学</button>
-          <button data-topic="english" class="subject-button" aria-pressed="false">英语</button>
-          <button data-topic="math" class="subject-button" aria-pressed="false">数学</button>
-        </div>
-        <div class="molecule-entry" id="molecule-entry"><button type="button" id="molecule-start">H₂O / CO₂ <span>空间小课堂</span></button></div>
-        <section class="molecule-controls" id="molecule-controls" aria-label="分子对比小课堂" hidden>
-          <div class="molecule-heading"><span>H₂O / CO₂</span><button type="button" id="molecule-close" aria-label="收起分子小课堂">收起</button></div>
-          <p id="molecule-step-label" role="status" aria-live="polite"></p>
-          <div class="molecule-actions"><button type="button" id="molecule-prev" aria-label="上一步">上一步</button><button type="button" id="molecule-listen">听讲解</button><button type="button" id="molecule-next">下一步</button></div>
-          <p class="molecule-hint">拖动分子观察 · 可随时在下方追问</p>
-        </section>
         <div class="messages" id="messages" role="log" aria-label="课堂对话" aria-live="polite"><div class="message"><small>猫老师 · 离线示例</small><div class="bubble">你好呀，我是猫小将。🐾
 宇宙很大，我们从一个小问题开始。
-选个主题，或者问我一句吧。</div></div></div>
+今天想一起弄明白什么？</div></div></div>
         <form id="chat-form" class="compose">
           <div class="composer-shell">
             <textarea id="chat-input" aria-label="向猫老师提问" placeholder="今天想弄明白什么？" maxlength="4000" rows="2" autocomplete="off" required></textarea>

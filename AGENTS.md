@@ -1,5 +1,15 @@
 # Boundless Classroom public demo
 
+## All-subject classroom 30 · 2026-11-07
+
+This release supersedes version 29's fixed four-step molecular chapter. There is one open, all-subject conversation: remove the chapter launcher, chapter controls and subject tabs. Mathematics, physics and chemistry are teaching priorities, not mandatory routes. Keep the original cat, deep-space classroom, live translucent background and existing conversation/voice controls; the chat rail is smaller and quieter.
+
+The local ChemBoard catalog contains 51 finite molecular/ion structures. Explicit requests such as “展示水分子的 3D 模型” resolve through a deterministic, allowlisted dialogue tool and display actual Three.js objects in the existing room. Chinese/English names and formulas are supported; ambiguous isomers require clarification. Up to two structures can be compared. Drag a model to rotate it; subsequent requests can switch models, hide them, or show/hide a supported net-polarity overlay. Suggestions in the teacher's reply remain optional actions rather than silently replacing the current scene. Never invent unavailable structures or execute model-supplied code, URLs or coordinates.
+
+Net-polarity graphics are curated for H₂O, NH₃, CO₂, CH₄, benzene and HCN only. Other structures remain viewable but unsupported net directions must be disclosed. Arrows use the chemical positive-tail to negative-head convention and qualitative lengths; they are not numerical dipole calculations. Raw SDF partial charges are unused. Imported coordinates and source attribution remain in the catalog; the original ChemBoard project is unchanged.
+
+The teacher receives bounded scene/tool context and can introduce an actually displayed model, invite observation and ask a relevant guiding question. It cannot see the live canvas or generate any requested model. The backend persona is all-subject, warm and cat-like, with explicit scientific uncertainty. Existing invited access, remembered connection, cloned voice and shared RMB5 daily limit remain. Publication and device acceptance are separate: this source is not proof of a live deployment. The owner performs visual, audio and device checks. Static allowlist: 33 files; molecule-lesson-content.js is an inert legacy cache stub, not an active chapter.
+
 ## Molecular classroom 29 · 2026-11-07
 
 A four-step H₂O / CO₂ comparison lesson lives inside the existing classroom chat rail. Molecules are actual Three.js objects from ChemBoard atom/bond data; students can drag them, see bond-polarity arrows, compare cancellation/resultant direction and read synchronized whiteboard notes. The cat presents a curated script, clearly labelled guided narration. Optional reading uses the existing authenticated/budgeted cloned-voice path; entering a shared lesson link never starts paid audio automatically. Follow-up questions carry bounded current-step context through the existing chat contract; the model is not claimed to see or manipulate the scene. No backend deployment needed.

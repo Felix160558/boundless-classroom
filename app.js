@@ -1,5 +1,6 @@
-import {topics,respond} from './tutor.js';
-import {moleculeSteps,moleculeQuestion} from './molecule-lesson-content.js?v=molecular-classroom-29';
+import {respond} from './tutor.js';
+import {MOLECULE_CATALOG} from './molecule-catalog.js?v=all-subject-30';
+import {resolveMoleculeIntent,suggestedMolecules} from './molecule-intent.js?v=all-subject-30';
 import {teacher} from './teacher-client.js?v=smooth-voice-28';
 import {createTeacherVoice} from './teacher-voice.js?v=smooth-voice-28';
 import {renderTeacherReply,lessonNotes} from './teacher-content.js?v=gentle-board-13';
@@ -7,7 +8,7 @@ import {renderTeacherReply,lessonNotes} from './teacher-content.js?v=gentle-boar
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 let space=null,topic='free',pending=false,voice=false,currentMode='home',xrSupported=false;
 let toastTimer=null;
-let moleculeStep=null,moleculeReplyBoard=null,moleculeNarration=null;
+let molecularScene={ids:[],dipole:false},modelOffer=null;
 let activeReply=null;
 let dictation=null,dictationFailure='',voiceSubmit=false;
 let readAloud=null,readAloudGeneration=0,cloudVoice=null,voiceProbe=null,voiceSource=null,browserVoiceNoticeShown=false;
@@ -29,7 +30,7 @@ function syncTeacherLearningState(){
 }
 const lessonBoards=new Map();
 function syncBoard(){
-  const notes=moleculeStep===null?lessonBoards.get(topic):(moleculeReplyBoard||moleculeSteps[moleculeStep].board);
+  const notes=lessonBoards.get('free');
   const accessible=$('#whiteboard-notes');
   accessible.hidden=currentMode==='home'||!notes;
   if(notes){
@@ -38,7 +39,7 @@ function syncBoard(){
     accessible.replaceChildren(title,list);
   }else accessible.replaceChildren();
   if(currentMode!=='home'&&notes)space?.setLesson(notes);
-  else if(currentMode==='classroom')space?.setBoard(topics[topic].title,topics[topic].sub);
+  else if(currentMode==='classroom')space?.setBoard('Stay curious.','Every question is a beginning.');
   else space?.setBoard('Stay curious.',currentMode==='vr'?'The universe is your classroom.':'Every question is a beginning.');
 }
 const defaultSceneDescription=$('#universe').getAttribute('aria-label');
@@ -59,7 +60,7 @@ function updateMode(){
   space?.setMode(currentMode);
   $('#universe').setAttribute('aria-label',currentMode==='vr'?'你坐在课桌前，面前是猫老师与白板，左右和头顶是通向星空的玻璃。拖动或使用方向键环视。':defaultSceneDescription);
   $('#back-home').lastChild.textContent=currentMode==='vr'?' 离开教室':' 返回太空';
-  syncMoleculeUI();
+  syncMolecularScene();
   syncBoard();
   syncComposer();
   if(currentMode==='classroom')$('#chat-input').focus({preventScroll:true});
@@ -131,7 +132,7 @@ function addMessage(who,text,mine=false,rich=false){
 }
 function teacherLabel(){return teacher.configured?'猫老师 · AI':'猫老师 · 离线示例';}
 function greeting(){
-  closeMoleculeLesson();
+  molecularScene={ids:[],dipole:false};modelOffer=null;syncMolecularScene();
   learningRest='idle';cancelReadAloud();syncTeacherLearningState();
   lessonBoards.clear();syncBoard();
   $('#messages').replaceChildren();
@@ -174,73 +175,69 @@ $('#chat-reset').addEventListener('click',()=>{if(pending)return;dictation?.canc
 $('#chat-cancel').addEventListener('click',()=>{learningRest='idle';cancelReadAloud();activeReply?.abort();syncTeacherLearningState();});
 updateConnection();
 if(teacher.configured)greeting();
-$$('.subject-button').forEach(btn=>btn.addEventListener('click',()=>{
-  if(pending&&moleculeStep!==null)return;
-  closeMoleculeLesson();
-  learningRest='idle';cancelReadAloud();
-  dictation?.cancel();dictation?.forget();
-  topic=btn.dataset.topic;$$('.subject-button').forEach(b=>{b.classList.toggle('active',b===btn);b.setAttribute('aria-pressed',String(b===btn));});
-  $('#chat-input').placeholder=topics[topic].prompt;syncBoard();
-  addMessage(teacher.configured?'学习主题':'猫老师 · 离线示例','我们来探索'+topics[topic].name+'。\n你可以问：'+topics[topic].prompt);
-  syncTeacherLearningState();
-}));
-function syncMoleculeUI(){
-  const active=moleculeStep!==null;
-  document.body.dataset.moleculeLesson=String(active&&currentMode!=='home');
-  $('#molecule-entry').hidden=active;
-  $('#molecule-controls').hidden=!active;
-  $('#molecule-start').disabled=pending;
-  if(active&&currentMode!=='home')$('#universe').setAttribute('aria-label','猫老师与白板前悬浮着水和二氧化碳的三维球棍模型。拖动分子观察；在普通课堂中也可聚焦此区域后使用方向键旋转。');
-  else if(currentMode==='classroom')$('#universe').setAttribute('aria-label',defaultSceneDescription);
-  if(active){
-    $('#molecule-step-label').textContent=String(moleculeStep+1).padStart(2,'0')+' / 04 · '+moleculeSteps[moleculeStep].title;
-    $('#molecule-prev').disabled=pending||moleculeStep===0;
-    $('#molecule-next').disabled=pending;
-    $('#molecule-next').textContent=moleculeStep===3?'完成':'下一步';
-    $('#molecule-close').disabled=pending;
-    $('#molecule-listen').disabled=pending;
-  }
-  space?.setMoleculeLesson?.(moleculeStep);
+// Models are dialogue tools, not a separate lesson or subject selection.
+function syncMolecularScene(){
+  const active=molecularScene.ids.length>0;
+  document.body.dataset.moleculeActive=String(active&&currentMode!=='home');
+  space?.setMolecularScene?.(molecularScene);
+  if(active&&currentMode!=='home'){
+    const names=molecularScene.ids.map(id=>MOLECULE_CATALOG[id]?.name||id).join('、');
+    $('#universe').setAttribute('aria-label','猫老师面前展示着'+names+'的三维模型。拖动模型观察；普通课堂中可聚焦此区域后用方向键旋转。');
+  }else if(currentMode==='classroom')$('#universe').setAttribute('aria-label',defaultSceneDescription);
 }
-function closeMoleculeLesson(){
-  if(moleculeStep===null)return;
-  cancelReadAloud();moleculeStep=null;moleculeReplyBoard=null;moleculeNarration=null;
-  $('#chat-input').placeholder=topics[topic].prompt;
-  syncMoleculeUI();syncBoard();
+function sceneNotes(){
+  const models=molecularScene.ids.map(id=>MOLECULE_CATALOG[id]).filter(Boolean);
+  if(!models.length)return null;
+  const points=models.map(model=>model.formula+' · '+(model.geometry||'三维结构'));
+  if(molecularScene.dipole){
+    for(const model of models){
+      if(points.length===3)break;
+      points.push(model.formula+'：'+(model.dipole?.kind==='zero'?'净偶极为零':model.dipole?.kind==='polar'?'金色箭头表示净极性方向':'尚未提供可靠的净偶极方向'));
+    }
+  }else points.push(models.some(model=>['polar','zero'].includes(model.dipole?.kind))?'拖动观察；可以继续问“显示偶极矩”。':'拖动观察分子的三维结构。');
+  return {title:models.map(model=>model.name).join(' / '),points:points.slice(0,3)};
 }
-function showMoleculeStep(index,{narrate=true}={}){
-  if(pending||!moleculeSteps[index])return;
-  cancelReadAloud();dictation?.cancel();dictation?.forget();
-  moleculeStep=index;moleculeReplyBoard=null;topic='chem';
-  $$('.subject-button').forEach(button=>{const chosen=button.dataset.topic==='chem';button.classList.toggle('active',chosen);button.setAttribute('aria-pressed',String(chosen));});
-  $('#chat-input').placeholder='关于这两个分子，你想问什么？';
-  syncMoleculeUI();syncBoard();
-  const step=moleculeSteps[index];
-  // Retain the conversation while keeping just one current guided explanation.
-  moleculeNarration?.remove();
-  moleculeNarration=addMessage('猫老师 · 引导讲解',step.text,false,true);
-  learningRest='settled';syncTeacherLearningState();
-  if(currentMode==='classroom')setTeacherLearningState('responding');
-  if(narrate&&voice&&(!teacher.configured||teacher.connected)){
-    cloudVoice?.unlock();void speak(step.text);
+function applyMolecularIntent(question){
+  let intent=resolveMoleculeIntent(question,molecularScene);
+  if(intent.type==='none'&&modelOffer&&/^(好[的啊呀]?|可以|行|展示吧|看看|yes|sure|show it)[。.!！\s]*$/i.test(question.trim())){
+    intent={...modelOffer};
   }
+  modelOffer=null;
+  if(intent.type==='show')molecularScene={ids:intent.ids.slice(0,2),dipole:Boolean(intent.dipole)};
+  else if(intent.type==='dipole')molecularScene={ids:(intent.ids||molecularScene.ids).slice(0,2),dipole:true};
+  else if(intent.type==='hideDipole')molecularScene={...molecularScene,dipole:false};
+  else if(intent.type==='clear')molecularScene={ids:[],dipole:false};
+  const changed=['show','dipole','hideDipole','clear'].includes(intent.type);
+  if(changed){
+    syncMolecularScene();
+    const notes=sceneNotes();if(notes)lessonBoards.set('free',notes);else lessonBoards.delete('free');syncBoard();
+    const names=molecularScene.ids.map(id=>MOLECULE_CATALOG[id]?.name||id).join('、');
+    intent.message=intent.message||(intent.type==='clear'?'已收起三维模型。':intent.type==='hideDipole'?'已收起偶极箭头，保留分子结构。':
+      (space&&!document.body.classList.contains('fallback')?'已展示':'已准备')+names+(molecularScene.dipole?'的极性示意。':'的三维模型，可以拖动观察。'));
+  }
+  if(intent.message)toast(intent.message);
+  return intent;
 }
-$('#molecule-start').addEventListener('click',()=>showMoleculeStep(0));
-$('#molecule-prev').addEventListener('click',()=>showMoleculeStep(moleculeStep-1));
-$('#molecule-next').addEventListener('click',()=>{if(moleculeStep===3)closeMoleculeLesson();else showMoleculeStep(moleculeStep+1);});
-$('#molecule-close').addEventListener('click',closeMoleculeLesson);
-$('#molecule-listen').addEventListener('click',()=>{
-  if(moleculeStep===null||pending)return;
-  if(teacher.configured&&!teacher.connected){openTeacherConnection();return;}
-  const text=moleculeSteps[moleculeStep].text;
-  if(cloudVoice?.snapshot()?.text===text||readAloud?.text===text){
-    if(cloudVoice?.waitingForTap)cloudVoice.resume();else cancelReadAloud();
-    return;
+function classroomQuestion(question,intent){
+  const models=molecularScene.ids.map(id=>MOLECULE_CATALOG[id]).filter(Boolean);
+  const state=models.length?models.map(m=>m.name+' '+m.formula+'；构型：'+m.geometry+'；极性图层：'+(molecularScene.dipole?(m.dipole?.kind==='zero'?'净偶极为零':m.dipole?.kind==='polar'?'显示已校准的化学净极性箭头':'没有可靠净箭头数据'):'隐藏')).join('。'):'目前没有展示三维模型';
+  const available=Object.values(MOLECULE_CATALOG).map(m=>m.name+'('+m.formula+')').join('、');
+  return `课堂状态：这是统一的全科学习空间，不需要选学科或章节，重点支持数学、物理与化学。${state}。本次页面工具结果：${intent.message||'没有触发新的模型操作'}。${space&&!document.body.classList.contains('fallback')?'三维教室已载入。':'三维画面可能仍在载入，不要声称学生已看到它。'}学生可以拖动模型；极性箭头是定性教学示意，正端十字朝负端，不是精确偶极矩计算。请根据页面报告自然讲解，可提出一个贴题的启发性问题，不要机械地每轮提问。不要声称你能看到画面或任意生成未收录的模型。可在有助于理解时建议展示一个已收录模型或显示当前分子的偶极；由学生选择后页面执行。已收录：${available}。\n学生的问题：${question}`;
+}
+function addModelSuggestions(item,answer){
+  const ids=suggestedMolecules(answer,molecularScene).filter(id=>MOLECULE_CATALOG[id]).slice(0,2);
+  const actions=[];
+  for(const id of ids)actions.push({text:'展示'+MOLECULE_CATALOG[id].name,question:'请展示'+MOLECULE_CATALOG[id].englishName+'的3D分子模型'});
+  if(molecularScene.ids.length&&!molecularScene.dipole&&/(偶极|dipole|净.*箭头)/i.test(answer)&&molecularScene.ids.some(id=>['polar','zero'].includes(MOLECULE_CATALOG[id]?.dipole?.kind)))actions.push({text:'显示偶极矩',question:'请显示当前模型的偶极矩'});
+  modelOffer=actions.length===1?(ids.length===1?{type:'show',ids:[ids[0]],dipole:false}:{type:'dipole',ids:[...molecularScene.ids],dipole:true}):null;
+  if(!actions.length)return;
+  const row=document.createElement('div');row.className='model-suggestions';
+  for(const action of actions.slice(0,2)){
+    const button=document.createElement('button');button.type='button';button.textContent=action.text;
+    button.addEventListener('click',()=>{if(pending)return;$('#chat-input').value=action.question;syncComposer();$('#chat-form').requestSubmit();});row.append(button);
   }
-  cancelReadAloud();dictation?.cancel();
-  voice=true;try{localStorage.setItem(voicePreferenceKey,'on');}catch{}
-  cloudVoice?.unlock();renderVoiceControl();void speak(moleculeSteps[moleculeStep].text);
-});
+  item.append(row);
+}
 
 function syncComposer(){
   const input=$('#chat-input');input.style.height='auto';input.style.height=Math.min(132,input.scrollHeight)+'px';
@@ -265,7 +262,7 @@ const dictationWait=setTimeout(()=>{
 import('./dictation.js?v=voice-input-20').then(({createDictation})=>{
   clearTimeout(dictationWait);dictationFailure='';
   dictation=createDictation({getText:()=>$('#chat-input').value,setText:text=>{$('#chat-input').value=text;syncComposer();},
-    getLanguage:()=>topic==='english'?'en-US':'zh-CN',onState:renderDictation});
+    getLanguage:()=>/[a-z]{3}/i.test($('#chat-input').value)&&!/[\u4e00-\u9fff]/.test($('#chat-input').value)?'en-US':'zh-CN',onState:renderDictation});
 }).catch(()=>{
   clearTimeout(dictationWait);dictationFailure='语音输入暂未载入，请刷新重试；文字输入仍可使用。';$('#dictation-button').disabled=false;
 });
@@ -285,7 +282,7 @@ $('#chat-input').addEventListener('focus',syncTeacherLearningState);
 $('#chat-input').addEventListener('blur',syncTeacherLearningState);
 window.addEventListener('pagehide',()=>{dictation?.cancel();cancelReadAloud();setTeacherLearningState('idle');});
 window.addEventListener('pageshow',syncTeacherLearningState);
-function setTeacherSpeech(type,detail={}){space?.setTeacherSpeech?.({type,...detail});renderMoleculeVoice();}
+function setTeacherSpeech(type,detail={}){space?.setTeacherSpeech?.({type,...detail});}
 function cancelReadAloud(){
   // Invalidate first: Safari may deliver a cancelled utterance's end/error late.
   readAloudGeneration++;readAloud=null;voiceProbe?.abort();voiceProbe=null;cloudVoice?.cancel();setTeacherSpeech('stop');
@@ -327,14 +324,7 @@ function speakBrowser(text){
   }catch{cancelReadAloud();toast('当前浏览器未能朗读。');}
 }
 function voiceAllowed(){return voice&&currentMode==='classroom'&&!document.hidden&&!dictation?.active;}
-function renderMoleculeVoice(){
-  if(moleculeStep===null)return;
-  const text=moleculeSteps[moleculeStep].text;
-  const same=cloudVoice?.snapshot()?.text===text||readAloud?.text===text;
-  $('#molecule-listen').textContent=same?(cloudVoice?.waitingForTap?'点击播放':'停止讲解'):'听讲解';
-}
 function renderVoiceControl(){
-  renderMoleculeVoice();
   const button=$('#voice-btn'),blocked=cloudVoice?.waitingForTap,preparing=cloudVoice?.state==='preparing';
   button.textContent=blocked?'点击播放':preparing?'准备声音…':'朗读：'+(voice?(voiceSource==='system'?'系统':'开'):'关');
   button.setAttribute('aria-pressed',String(voice));
@@ -380,8 +370,7 @@ async function runTurn(turn,retry=false,displayQuestion=turn.message){
   if(pending)return;
   learningRest='idle';cancelReadAloud();
   dictation?.cancel();dictation?.forget();
-  const turnLessonStep=moleculeStep;
-  const input=$('#chat-input');pending=true;syncMoleculeUI();$('.send').disabled=true;$('#chat-reset').disabled=true;
+  const input=$('#chat-input');pending=true;syncMolecularScene();$('.send').disabled=true;$('#chat-reset').disabled=true;
   if(retry&&input.value.trim()===displayQuestion)input.value='';
   $$('.retry-message').forEach(button=>{button.disabled=true;});
   if(!retry)addMessage('你',displayQuestion,true);
@@ -399,9 +388,8 @@ async function runTurn(turn,retry=false,displayQuestion=turn.message){
       if(result.contextTrimmed)toast('较早的对话已移出当前上下文，需要时可以再提醒猫老师。');
       if(result.finishReason==='length')toast('这次回答达到了长度上限，可以接着追问。');
     }else{await new Promise(resolve=>setTimeout(resolve,650));answer=respond(displayQuestion,turn.topic);notes=lessonNotes(answer);}
-    typing.remove();addMessage(teacherLabel(),answer,false,true);
+    typing.remove();const replyItem=addMessage(teacherLabel(),answer,false,true);addModelSuggestions(replyItem,answer);
     if(notes)lessonBoards.set(turn.topic,notes);else lessonBoards.delete(turn.topic);
-    if(moleculeStep!==null&&moleculeStep===turnLessonStep)moleculeReplyBoard=notes;
     syncBoard();
     learningRest='settled';
     // One acknowledgement for the completed answer, never a tap/wink per reply.
@@ -425,7 +413,7 @@ async function runTurn(turn,retry=false,displayQuestion=turn.message){
     }
     if(!input.value)input.value=displayQuestion;
   }finally{
-    pending=false;activeReply=null;syncMoleculeUI();syncComposer();$('#chat-reset').disabled=false;$('#chat-cancel').hidden=true;
+    pending=false;activeReply=null;syncMolecularScene();syncComposer();$('#chat-reset').disabled=false;$('#chat-cancel').hidden=true;
     $('#messages').setAttribute('aria-busy','false');updateConnection();if(currentMode==='classroom')input.focus({preventScroll:true});
   }
 }
@@ -437,10 +425,16 @@ $('#chat-form').addEventListener('submit',async e=>{
     await dictation?.stop();
     const input=$('#chat-input'),question=input.value.trim();
     if(!question||currentMode!=='classroom')return;
-    if(teacher.configured&&!teacher.connected){openTeacherConnection();return;}
-    const contextualQuestion=moleculeQuestion(question,moleculeStep);
+    const intent=applyMolecularIntent(question);
+    if(teacher.configured&&!teacher.connected){
+      if(intent.type!=='none'){
+        addMessage('你',question,true);addMessage('课堂工具',intent.message||'可以先观察模型，连接猫老师后再一起讨论。');input.value='';syncComposer();return;
+      }
+      openTeacherConnection();return;
+    }
+    const contextualQuestion=classroomQuestion(question,intent);
     if(contextualQuestion.length>4000){toast('这条问题有些长，请缩短一点再发给猫老师。');return;}
-    const turn=teacher.turn(contextualQuestion,topic);input.value='';syncComposer();void runTurn(turn,false,question);
+    const turn=teacher.turn(contextualQuestion,'free');input.value='';syncComposer();void runTurn(turn,false,question);
   }finally{voiceSubmit=false;syncComposer();}
 });
 $('#chat-input').addEventListener('keydown',e=>{
@@ -468,7 +462,7 @@ function fallback(message){
 const sceneStartupTimer=setTimeout(()=>{
   if(!space)fallback('三维教室资源载入较慢，可刷新重试。文字课堂和预约仍可使用。');
 },45000);
-import('./space-scene.js?v=molecular-classroom-29').then(async({createSpace})=>{
+import('./space-scene.js?v=all-subject-30').then(async({createSpace})=>{
   clearTimeout(sceneStartupTimer);
   space=createSpace($('#universe'),(state,detail)=>{
     if(state==='ready'){
@@ -510,8 +504,4 @@ import('./space-scene.js?v=molecular-classroom-29').then(async({createSpace})=>{
   if(xrSupported){$('#immersive-btn').textContent='进入头显 ↗';$('#xr-status').textContent='课桌座位视角，设备支持实验性单人头显入口。';}
 }).catch(()=>{clearTimeout(sceneStartupTimer);fallback('三维教室暂未载入，请刷新重试。文字课堂和预约仍可使用。');});
 
-// Shareable lesson entry shows the first step without requesting paid audio on load.
-if(new URLSearchParams(location.search).get('lesson')==='polarity'){
-  if(currentMode==='home')navigate('classroom');
-  showMoleculeStep(0,{narrate:false});
-}
+// Older comparison links now enter the same open classroom, without a chapter flow.
