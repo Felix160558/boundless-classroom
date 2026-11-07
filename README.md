@@ -1,5 +1,11 @@
 # Boundless Classroom · Space Version
 
+## Bilingual input 32 · 2026-11-07
+
+Dictation offers equal Chinese / English controls, persists the explicit choice, and uses browser language preferences on first use. Remove the draft-text heuristic: an empty or Chinese draft must not force an English recording through zh-CN. Each recording freezes its language; switching stops the old take and preserves editable text, without auto-starting the microphone. Keep the Safari user gesture, restart and late-event isolation. English recording feedback uses English. Browser Web Speech still uses one recognition language per take, not guaranteed automatic bilingual detection.
+
+The teacher follows the current student's actual question for reply and board language, ignoring the language of Chinese scene metadata. English questions get English explanations/board notes and Chinese questions get Chinese, with explicit translation/bilingual requests taking precedence. Mixed speech follows the main question language. English molecular geometry terms remain. No provider, cost cap, stored connection, invite, 3D scene or cloned-voice changes. Owner performs microphone/audio/device acceptance. Static allowlist remains 33 files; six-file incremental release. Source: docs/BILINGUAL_INPUT_32.md.
+
 ## Quiet shape 31 · 2026-11-07
 
 Molecular geometry names now use English on the whiteboard (Bent, Linear, Trigonal pyramidal, Tetrahedral and appropriate local geometry for complex molecules). Remove geometry-name labels beneath 3D models; keep only the formula identifier. Preserve all original atom positions, bonds, dipoles, model rotation and character visuals. The teacher prompt requests English shape terminology, with a narrow client-side terminology normalizer for board text; ordinary explanations remain bilingual.

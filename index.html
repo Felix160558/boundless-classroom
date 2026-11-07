@@ -8,12 +8,12 @@
   <title>Boundless Classroom · Space Version</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23080c12'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-size='46' fill='%23f3f0e8'%3E∞%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="./katex-local.css">
-  <link rel="stylesheet" href="./styles.css?v=quiet-shape-31">
+  <link rel="stylesheet" href="./styles.css?v=bilingual-input-32">
   <link rel="preload" as="fetch" href="./cat-teacher.glb?v=refined-cat-22" crossorigin="anonymous" fetchpriority="low">
   <link rel="modulepreload" href="./space-scene.js?v=quiet-shape-31">
   <link rel="modulepreload" href="./three.module.min.js">
   <link rel="modulepreload" href="./meshopt_decoder.mjs">
-  <script type="module" src="./app.js?v=quiet-shape-31"></script>
+  <script type="module" src="./app.js?v=bilingual-input-32"></script>
 </head>
 <body data-mode="home">
   <div class="cosmos-fallback" aria-hidden="true"><div class="fallback-platform"></div></div>
@@ -82,7 +82,14 @@
             <p id="dictation-status" role="status" aria-live="polite"></p><span id="dictation-time" aria-hidden="true"></span>
             <button type="button" id="dictation-restart" hidden>重新录入</button>
           </div>
-          <div class="compose-footer"><p id="chat-service-note">预设教学脚本 · 尚未接入大模型</p><button id="voice-btn" type="button" aria-pressed="false">朗读：关</button></div>
+          <div class="compose-footer">
+            <div class="dictation-languages" role="group" aria-label="语音识别语言 / Speech recognition language">
+              <button type="button" data-dictation-language="zh-CN" aria-pressed="false" lang="zh-CN" title="用中文进行语音输入">中文</button>
+              <button type="button" data-dictation-language="en-US" aria-pressed="false" lang="en" title="Dictate in English">English</button>
+            </div>
+            <button id="voice-btn" type="button" aria-pressed="false">朗读：关</button>
+            <p id="chat-service-note">预设教学脚本 · 尚未接入大模型</p>
+          </div>
         </form>
       </aside>
     </section>

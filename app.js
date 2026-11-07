@@ -11,6 +11,8 @@ let toastTimer=null;
 let molecularScene={ids:[],dipole:false},modelOffer=null;
 let activeReply=null;
 let dictation=null,dictationFailure='',voiceSubmit=false;
+let dictationLanguage='';
+const dictationLanguageKey='boundless_dictation_language_v1';
 let readAloud=null,readAloudGeneration=0,cloudVoice=null,voiceProbe=null,voiceSource=null,browserVoiceNoticeShown=false;
 const voicePreferenceKey='boundless_teacher_read_aloud_v1';
 try{voice=localStorage.getItem(voicePreferenceKey)==='on';}catch{}
@@ -223,7 +225,7 @@ function classroomQuestion(question,intent){
   const models=molecularScene.ids.map(id=>MOLECULE_CATALOG[id]).filter(Boolean);
   const state=models.length?models.map(m=>m.name+' '+m.formula+'；构型：'+m.geometry+'；极性图层：'+(molecularScene.dipole?(m.dipole?.kind==='zero'?'净偶极为零':m.dipole?.kind==='polar'?'显示已校准的化学净极性箭头':'没有可靠净箭头数据'):'隐藏')).join('。'):'目前没有展示三维模型';
   const available=Object.values(MOLECULE_CATALOG).map(m=>m.name+'('+m.formula+')').join('、');
-  return `课堂状态：这是统一的全科学习空间，不需要选学科或章节，重点支持数学、物理与化学。${state}。本次页面工具结果：${intent.message||'没有触发新的模型操作'}。${space&&!document.body.classList.contains('fallback')?'三维教室已载入。':'三维画面可能仍在载入，不要声称学生已看到它。'}学生可以拖动模型；极性箭头是定性教学示意，正端十字朝负端，不是精确偶极矩计算。分子形状名称统一用英文，在白板重点中呈现；模型下不标形状。区分 molecular geometry 和 electron-pair geometry。请根据页面报告自然讲解，可提出一个贴题的启发性问题，不要机械地每轮提问。不要声称你能看到画面或任意生成未收录的模型。可在有助于理解时建议展示一个已收录模型或显示当前分子的偶极；由学生选择后页面执行。已收录：${available}。\n学生的问题：${question}`;
+  return `课堂状态：这是统一的全科学习空间，不需要选学科或章节，重点支持数学、物理与化学。${state}。本次页面工具结果：${intent.message||'没有触发新的模型操作'}。${space&&!document.body.classList.contains('fallback')?'三维教室已载入。':'三维画面可能仍在载入，不要声称学生已看到它。'}学生可以拖动模型；极性箭头是定性教学示意，正端十字朝负端，不是精确偶极矩计算。分子形状名称统一用英文，在白板重点中呈现；模型下不标形状。区分 molecular geometry 和 electron-pair geometry。请根据页面报告自然讲解，可提出一个贴题的启发性问题，不要机械地每轮提问。不要声称你能看到画面或任意生成未收录的模型。可在有助于理解时建议展示一个已收录模型或显示当前分子的偶极；由学生选择后页面执行。已收录：${available}。\nReply and write whiteboard notes in the language of the student's actual question below, not the Chinese classroom metadata above. Follow explicit language or translation requests; keep molecular geometry names in English.\n学生的问题：${question}`;
 }
 function addModelSuggestions(item,answer){
   const ids=suggestedMolecules(answer,molecularScene).filter(id=>MOLECULE_CATALOG[id]).slice(0,2);
@@ -243,15 +245,26 @@ function addModelSuggestions(item,answer){
 function syncComposer(){
   const input=$('#chat-input');input.style.height='auto';input.style.height=Math.min(132,input.scrollHeight)+'px';
   $('.send').disabled=pending||voiceSubmit||!input.value.trim();
+  syncDictationLanguage();
   syncTeacherLearningState();
+}
+function syncDictationLanguage(){
+  const english=dictationLanguage==='en-US';
+  for(const button of $$('[data-dictation-language]')){
+    button.setAttribute('aria-pressed',String(button.dataset.dictationLanguage===dictationLanguage));
+    button.disabled=dictationState==='stopping'||voiceSubmit;
+  }
+  const active=['starting','listening','stopping'].includes(dictationState),button=$('#dictation-button');
+  button.setAttribute('aria-label',active?(english?'Stop dictation':'停止语音输入'):(english?'Dictate in English':'中文语音输入'));
+  button.title=active?(english?'Stop dictation':'停止语音输入'):(english?'English dictation · review before sending':'中文语音输入 · 确认文字后再发送');
+  $('#dictation-restart').textContent=english?'Record again':'重新录入';
 }
 function renderDictation({state='idle',message='',supported=true,canRestart=false,seconds=0}){
   dictationState=state;if(state==='starting'||state==='listening')learningRest='idle';
   const active=['starting','listening','stopping'].includes(state),button=$('#dictation-button');
   $('#chat-form').dataset.dictation=state;button.disabled=state==='stopping';
   button.setAttribute('aria-pressed',String(active));button.setAttribute('aria-disabled',String(!supported));
-  button.setAttribute('aria-label',active?'停止语音输入':'语音输入');
-  button.title=active?'停止语音输入':'语音输入 · 由浏览器识别，确认文字后再发送';
+  syncDictationLanguage();
   if($('#dictation-status').textContent!==message)$('#dictation-status').textContent=message;
   $('#dictation-time').textContent=state==='listening'?Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0'):'';
   $('#dictation-row').hidden=!message;$('#dictation-restart').hidden=!canRestart;
@@ -260,12 +273,24 @@ function renderDictation({state='idle',message='',supported=true,canRestart=fals
 const dictationWait=setTimeout(()=>{
   dictationFailure='语音输入载入较慢，请稍后再试。';$('#dictation-button').disabled=false;
 },12000);
-import('./dictation.js?v=voice-input-20').then(({createDictation})=>{
+import('./dictation.js?v=bilingual-input-32').then(({createDictation,preferredDictationLanguage})=>{
   clearTimeout(dictationWait);dictationFailure='';
+  let storedLanguage='';try{storedLanguage=localStorage.getItem(dictationLanguageKey)||'';}catch{}
+  dictationLanguage=preferredDictationLanguage({storedLanguage,languages:navigator.languages?.length?navigator.languages:[navigator.language]});
   dictation=createDictation({getText:()=>$('#chat-input').value,setText:text=>{$('#chat-input').value=text;syncComposer();},
-    getLanguage:()=>/[a-z]{3}/i.test($('#chat-input').value)&&!/[\u4e00-\u9fff]/.test($('#chat-input').value)?'en-US':'zh-CN',onState:renderDictation});
+    getLanguage:()=>dictationLanguage,onState:renderDictation});
+  syncDictationLanguage();
 }).catch(()=>{
   clearTimeout(dictationWait);dictationFailure='语音输入暂未载入，请刷新重试；文字输入仍可使用。';$('#dictation-button').disabled=false;
+});
+for(const button of $$('[data-dictation-language]'))button.addEventListener('click',()=>{
+  const next=button.dataset.dictationLanguage;
+  if(next===dictationLanguage)return;
+  dictation?.cancel();
+  dictationLanguage=next;
+  try{localStorage.setItem(dictationLanguageKey,next);}catch{}
+  syncDictationLanguage();
+  if(dictation)renderDictation({state:'idle',message:next==='en-US'?'English selected. Tap the microphone to speak.':'已切换中文，点麦克风开始。',supported:dictation.supported});
 });
 $('#dictation-button').addEventListener('click',()=>{
   if(!dictation){renderDictation({state:'error',message:dictationFailure||'语音输入正在准备，请稍后再试。'});return;}
