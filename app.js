@@ -1,5 +1,6 @@
 import {topics,respond} from './tutor.js';
-import {teacher} from './teacher-client.js?v=remember-access-15';
+import {teacher} from './teacher-client.js?v=cat-voice-27';
+import {createTeacherVoice} from './teacher-voice.js?v=cat-voice-27';
 import {renderTeacherReply,lessonNotes} from './teacher-content.js?v=gentle-board-13';
 
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
@@ -7,7 +8,9 @@ let space=null,topic='free',pending=false,voice=false,currentMode='home',xrSuppo
 let toastTimer=null;
 let activeReply=null;
 let dictation=null,dictationFailure='',voiceSubmit=false;
-let readAloud=null,readAloudGeneration=0;
+let readAloud=null,readAloudGeneration=0,cloudVoice=null,voiceProbe=null,voiceSource=null,browserVoiceNoticeShown=false;
+const voicePreferenceKey='boundless_teacher_read_aloud_v1';
+try{voice=localStorage.getItem(voicePreferenceKey)==='on';}catch{}
 let learningRest='idle',teacherLearningState=null,dictationState='idle';
 // Semantic state only: animation timing and smooth transitions belong to the teacher.
 function setTeacherLearningState(state){
@@ -221,12 +224,12 @@ window.addEventListener('pageshow',syncTeacherLearningState);
 function setTeacherSpeech(type,detail={}){space?.setTeacherSpeech?.({type,...detail});}
 function cancelReadAloud(){
   // Invalidate first: Safari may deliver a cancelled utterance's end/error late.
-  readAloudGeneration++;readAloud=null;setTeacherSpeech('stop');
+  readAloudGeneration++;readAloud=null;voiceProbe?.abort();voiceProbe=null;cloudVoice?.cancel();setTeacherSpeech('stop');
   try{if('speechSynthesis'in window)speechSynthesis.cancel();}catch{}
 }
-function speak(text){
-  cancelReadAloud();
-  if(!voice||currentMode!=='classroom'||document.hidden||dictation?.active||!('speechSynthesis'in window))return;
+function speakBrowser(text){
+  if(!voiceAllowed())return;
+  if(!('speechSynthesis'in window)){toast('当前浏览器不支持系统朗读。');return;}
   try{
     const utterance=new SpeechSynthesisUtterance(text),generation=readAloudGeneration;
     const take={utterance,generation,text,phase:'queued',charIndex:0,charLength:0};
@@ -259,11 +262,48 @@ function speak(text){
     speechSynthesis.speak(utterance);
   }catch{cancelReadAloud();toast('当前浏览器未能朗读。');}
 }
+function voiceAllowed(){return voice&&currentMode==='classroom'&&!document.hidden&&!dictation?.active;}
+function renderVoiceControl(){
+  const button=$('#voice-btn'),blocked=cloudVoice?.waitingForTap,preparing=cloudVoice?.state==='preparing';
+  button.textContent=blocked?'点击播放':preparing?'准备声音…':'朗读：'+(voice?(voiceSource==='system'?'系统':'开'):'关');
+  button.setAttribute('aria-pressed',String(voice));
+  button.title=blocked?'点此播放已生成的猫老师声音，不会再次生成或扣费':
+    voiceSource==='system'?'专属音色尚未配置，当前使用浏览器系统朗读':
+    '记住朗读偏好；开启后自动朗读后续回答，点击可关闭';
+}
+cloudVoice=createTeacherVoice({synthesize:(text,options)=>teacher.speech(text,options),isAllowed:voiceAllowed,
+  onSpeech:setTeacherSpeech,onState:(state,message)=>{
+    renderVoiceControl();if(message)toast(message);if(state==='error')updateConnection();
+  }});
+renderVoiceControl();
+async function speak(text){
+  cancelReadAloud();if(!voiceAllowed())return;
+  const generation=readAloudGeneration,probe=new AbortController();voiceProbe=probe;
+  try{
+    const configured=await teacher.voiceStatus({signal:probe.signal});
+    if(generation!==readAloudGeneration||!voiceAllowed())return;
+    voiceSource=configured?'clone':'system';renderVoiceControl();
+    if(configured)await cloudVoice.speak(text);
+    else{
+      if(!browserVoiceNoticeShown){toast('专属音色尚未配置，本次使用浏览器系统朗读。');browserVoiceNoticeShown=true;}
+      speakBrowser(text);
+    }
+  }catch(error){
+    if(generation===readAloudGeneration&&error?.code!=='cancelled')toast(error.message||'语音暂未连接，文字回答已保留。');
+  }finally{if(voiceProbe===probe)voiceProbe=null;}
+}
 $('#voice-btn').addEventListener('click',()=>{
-  if(!('speechSynthesis'in window)){toast('当前浏览器不支持文字朗读。');return;}
-  voice=!voice;$('#voice-btn').textContent='朗读：'+(voice?'开':'关');$('#voice-btn').setAttribute('aria-pressed',String(voice));
-  if(!voice)cancelReadAloud();toast(voice?'下一条回复将使用浏览器朗读。':'朗读已关闭。');
+  if(cloudVoice.waitingForTap&&voice){cloudVoice.resume();return;}
+  voice=!voice;let remembered=false;try{localStorage.setItem(voicePreferenceKey,voice?'on':'off');remembered=true;}catch{}
+  if(!voice){cancelReadAloud();renderVoiceControl();toast('朗读已关闭。');return;}
+  cloudVoice.unlock();renderVoiceControl();
+  toast(remembered?'朗读已开启，后续回答会自动播放；此浏览器会记住偏好。':'朗读已开启；浏览器未能保存偏好，刷新后需重新开启。');
+  void teacher.voiceStatus({refresh:true}).then(configured=>{
+    if(!voice)return;voiceSource=configured?'clone':'system';renderVoiceControl();
+    if(!configured)toast('专属音色尚未配置，当前使用浏览器系统朗读。');
+  }).catch(error=>{if(voice)toast(error.message);});
 });
+
 async function runTurn(turn,retry=false){
   if(pending)return;
   learningRest='idle';cancelReadAloud();
@@ -307,6 +347,7 @@ async function runTurn(turn,retry=false){
 }
 $('#chat-form').addEventListener('submit',async e=>{
   e.preventDefault();if(pending||voiceSubmit)return;
+  if(voice)cloudVoice.unlock(); // Keep activation synchronous with send/Enter.
   voiceSubmit=true;syncComposer();
   try{
     await dictation?.stop();
@@ -373,6 +414,10 @@ import('./space-scene.js?v=teacher-presence-26').then(async({createSpace})=>{
     setTeacherSpeech('start',{text:readAloud.text});
     setTeacherSpeech('boundary',{charIndex:readAloud.charIndex,charLength:readAloud.charLength});
     if(readAloud.phase==='paused')setTeacherSpeech('pause');
+  }
+  const audioTake=cloudVoice.snapshot();
+  if(audioTake&&['speaking','paused'].includes(audioTake.phase)){
+    setTeacherSpeech('start',{text:audioTake.text});if(audioTake.phase==='paused')setTeacherSpeech('pause');
   }
   teacherLearningState=null; // Replay the current semantic state after a late scene load.
   updateMode();xrSupported=await space.immersiveSupported();

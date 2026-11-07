@@ -1,5 +1,10 @@
 # Boundless Classroom · Space Version
 
+## Cat voice 27
+
+Adds an optional invited voice gateway and remembered read-aloud preference. CosyVoice credentials and the selected voice live only on the existing backend; the public files contain no original recording or provider key. Audio playback coordinates with the existing teacher mouth animation and cancels on navigation, interruption or microphone use. The original character, classroom and teacher-presence-26 motions remain. Provider configuration and successful playback are required before calling the clone connected; unconfigured gateway operation remains explicitly browser read-aloud. The owner handles visual/audio/device acceptance. This static snapshot contains 29 files; model cache stays refined-cat-22.
+
+
 ## Teacher presence 26
 
 This version coordinates existing facial expressions with classroom states and adds restrained independent nods and head tilts. A local head/neck binding keeps the collar boundary anchored, with the face, glasses, eyelids, mouth details and fine fur following the same motion. Preserve the supplied character, original GLB/4K atlas, proportions and fixed stance; do not add whole-body bobbing, arm gestures or whiteboard pointing. Transitions remain smooth, VR motion is smaller and reduced-motion preferences are respected. There are no new AI calls or backend changes. Modules use teacher-presence-26; model/fur-data cache stays refined-cat-22. The public allowlist now includes cat-presence.js and contains 28 files. Visual/audio/device acceptance belongs to the owner; publication status is recorded privately.
