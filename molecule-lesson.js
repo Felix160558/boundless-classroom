@@ -1,5 +1,5 @@
 import * as THREE from './three.module.min.js';
-import {MOLECULE_CATALOG} from './molecule-catalog.js?v=all-subject-30';
+import {MOLECULE_CATALOG} from './molecule-catalog.js?v=quiet-shape-31';
 
 // ChemBoard's finite atom/bond catalogue is rendered in the existing classroom.
 // No coordinates, charges or dipole directions are guessed from a chat reply.
@@ -99,8 +99,7 @@ export function createMoleculeStage(parent) {
     const captionY=extents.min.y-Math.max(...atomRadii)-.18;
     const displayFormula=String(entry.formula||entry.id).replace(/[0-9]/g,d=>'₀₁₂₃₄₅₆₇₈₉'[Number(d)]);
     label(displayFormula,new THREE.Vector3(0,captionY,.06),count===1?1.45:1.15,holder);
-    const geometry=String(entry.geometry||'');
-    if(geometry&&geometry.length<=42)label(geometry,new THREE.Vector3(0,captionY-.21,.06),count===1?1.8:1.45,holder,'#aeb9c3',.14);
+    // Shape names belong on the whiteboard; leave the 3D model visually quiet.
     if(entry.dipole?.kind==='zero'){
       label('μ = 0',new THREE.Vector3(0,extents.max.y+.28,.08),.65,overlay,'#efd9b7',.19);
     }else if(direction){

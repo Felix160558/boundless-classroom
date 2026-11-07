@@ -1,4 +1,4 @@
-import {MOLECULE_CATALOG} from './molecule-catalog.js?v=all-subject-30';
+import {MOLECULE_CATALOG} from './molecule-catalog.js?v=quiet-shape-31';
 
 // A deliberately small, deterministic tool router. Text remains ordinary chat;
 // model replies never execute code or silently change the current scene.

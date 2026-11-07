@@ -1,7 +1,9 @@
 // Audio playback only. Provider authentication and synthesis stay in the client/gateway.
 export function createTeacherVoice({synthesize,synthesizeStream,canStream=()=>false,onSpeech=()=>{},onState=()=>{},isAllowed=()=>true,env=globalThis}){
   let audio=null,context=null,current=null,generation=0,state='idle';
-  const sampleRate=24000,maxPCM=8*1024*1024,initialFrames=3360,chunkFrames=4800;
+  // Begin after 80 ms of valid PCM instead of waiting for 140 ms; keep a
+  // small initial cushion and the existing scheduling horizon for smooth playback.
+  const sampleRate=24000,maxPCM=8*1024*1024,initialFrames=1920,chunkFrames=4800;
   const later=env.setTimeout?.bind(env)||setTimeout,clearLater=env.clearTimeout?.bind(env)||clearTimeout;
   const emit=(next,message='')=>{state=next;onState(next,message);};
   const stopMouth=()=>onSpeech('stop');

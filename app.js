@@ -1,8 +1,8 @@
 import {respond} from './tutor.js';
-import {MOLECULE_CATALOG} from './molecule-catalog.js?v=all-subject-30';
-import {resolveMoleculeIntent,suggestedMolecules} from './molecule-intent.js?v=all-subject-30';
-import {teacher} from './teacher-client.js?v=smooth-voice-28';
-import {createTeacherVoice} from './teacher-voice.js?v=smooth-voice-28';
+import {MOLECULE_CATALOG,englishShapeTerms} from './molecule-catalog.js?v=quiet-shape-31';
+import {resolveMoleculeIntent,suggestedMolecules} from './molecule-intent.js?v=quiet-shape-31';
+import {teacher} from './teacher-client.js?v=quiet-shape-31';
+import {createTeacherVoice} from './teacher-voice.js?v=quiet-shape-31';
 import {renderTeacherReply,lessonNotes} from './teacher-content.js?v=gentle-board-13';
 
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
@@ -30,7 +30,8 @@ function syncTeacherLearningState(){
 }
 const lessonBoards=new Map();
 function syncBoard(){
-  const notes=lessonBoards.get('free');
+  const saved=lessonBoards.get('free');
+  const notes=saved?{title:englishShapeTerms(saved.title),points:saved.points.map(englishShapeTerms)}:null;
   const accessible=$('#whiteboard-notes');
   accessible.hidden=currentMode==='home'||!notes;
   if(notes){
@@ -188,7 +189,7 @@ function syncMolecularScene(){
 function sceneNotes(){
   const models=molecularScene.ids.map(id=>MOLECULE_CATALOG[id]).filter(Boolean);
   if(!models.length)return null;
-  const points=models.map(model=>model.formula+' · '+(model.geometry||'三维结构'));
+  const points=models.map(model=>model.formula+' · '+(model.geometry||'Molecular structure'));
   if(molecularScene.dipole){
     for(const model of models){
       if(points.length===3)break;
@@ -222,7 +223,7 @@ function classroomQuestion(question,intent){
   const models=molecularScene.ids.map(id=>MOLECULE_CATALOG[id]).filter(Boolean);
   const state=models.length?models.map(m=>m.name+' '+m.formula+'；构型：'+m.geometry+'；极性图层：'+(molecularScene.dipole?(m.dipole?.kind==='zero'?'净偶极为零':m.dipole?.kind==='polar'?'显示已校准的化学净极性箭头':'没有可靠净箭头数据'):'隐藏')).join('。'):'目前没有展示三维模型';
   const available=Object.values(MOLECULE_CATALOG).map(m=>m.name+'('+m.formula+')').join('、');
-  return `课堂状态：这是统一的全科学习空间，不需要选学科或章节，重点支持数学、物理与化学。${state}。本次页面工具结果：${intent.message||'没有触发新的模型操作'}。${space&&!document.body.classList.contains('fallback')?'三维教室已载入。':'三维画面可能仍在载入，不要声称学生已看到它。'}学生可以拖动模型；极性箭头是定性教学示意，正端十字朝负端，不是精确偶极矩计算。请根据页面报告自然讲解，可提出一个贴题的启发性问题，不要机械地每轮提问。不要声称你能看到画面或任意生成未收录的模型。可在有助于理解时建议展示一个已收录模型或显示当前分子的偶极；由学生选择后页面执行。已收录：${available}。\n学生的问题：${question}`;
+  return `课堂状态：这是统一的全科学习空间，不需要选学科或章节，重点支持数学、物理与化学。${state}。本次页面工具结果：${intent.message||'没有触发新的模型操作'}。${space&&!document.body.classList.contains('fallback')?'三维教室已载入。':'三维画面可能仍在载入，不要声称学生已看到它。'}学生可以拖动模型；极性箭头是定性教学示意，正端十字朝负端，不是精确偶极矩计算。分子形状名称统一用英文，在白板重点中呈现；模型下不标形状。区分 molecular geometry 和 electron-pair geometry。请根据页面报告自然讲解，可提出一个贴题的启发性问题，不要机械地每轮提问。不要声称你能看到画面或任意生成未收录的模型。可在有助于理解时建议展示一个已收录模型或显示当前分子的偶极；由学生选择后页面执行。已收录：${available}。\n学生的问题：${question}`;
 }
 function addModelSuggestions(item,answer){
   const ids=suggestedMolecules(answer,molecularScene).filter(id=>MOLECULE_CATALOG[id]).slice(0,2);
@@ -377,9 +378,8 @@ async function runTurn(turn,retry=false,displayQuestion=turn.message){
   const typing=addMessage(teacher.configured?'猫老师 · 正在想一想':'猫老师 · 准备示例中','⋯');typing.classList.add('thinking-message');
   $('#messages').setAttribute('aria-busy','true');
   activeReply=new AbortController();$('#chat-cancel').hidden=!teacher.configured;syncTeacherLearningState();
-  // Check voice availability while the text answer is being generated, not after it.
-  // This only reads configuration; it never synthesizes or incurs model fees.
-  if(voice&&teacher.connected)void teacher.voiceStatus({signal:activeReply.signal}).catch(()=>{});
+  // The authenticated reply carries voice capability; older gateways are
+  // checked by speak() only when needed, without a competing per-turn probe.
   const replyConnection=teacher.token;
   try{
     let answer,notes=null;
@@ -462,7 +462,7 @@ function fallback(message){
 const sceneStartupTimer=setTimeout(()=>{
   if(!space)fallback('三维教室资源载入较慢，可刷新重试。文字课堂和预约仍可使用。');
 },45000);
-import('./space-scene.js?v=all-subject-30').then(async({createSpace})=>{
+import('./space-scene.js?v=quiet-shape-31').then(async({createSpace})=>{
   clearTimeout(sceneStartupTimer);
   space=createSpace($('#universe'),(state,detail)=>{
     if(state==='ready'){

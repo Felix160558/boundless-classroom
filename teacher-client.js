@@ -6,7 +6,7 @@ export class TeacherError extends Error {
 export class TeacherClient {
   constructor(origin='',options={}){
     this.origin='';this.token='';this.expiresAt=0;this.conversationId=null;this.remembered=false;
-    this.voiceCapability=null;this.voiceCapabilityAt=0;this.voiceStreaming=false;this.voiceRequests=new Set();
+    this.voiceCapability=null;this.voiceCapabilityAt=0;this.voiceCapabilityRevision=0;this.voiceStreaming=false;this.voiceRequests=new Set();
     this.storageKey='boundless_teacher_access_v2';this.now=options.now||Date.now;
     this.fetchRequest=options.fetch||((...args)=>fetch(...args));
     try{this.storage=Object.hasOwn(options,'storage')?options.storage:globalThis.localStorage;}catch{this.storage=null;}
@@ -58,16 +58,19 @@ export class TeacherClient {
     if(!refresh&&this.voiceCapability!==null&&this.now()-this.voiceCapabilityAt<60000)return this.voiceCapability;
     const controller=new AbortController(),abort=()=>controller.abort();
     signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();
-    const timer=setTimeout(abort,8000);
+    const timer=setTimeout(abort,8000),revision=this.voiceCapabilityRevision;
     try{
       const response=await this.fetchRequest(this.origin+'/healthz',{credentials:'omit',cache:'no-store',referrerPolicy:'no-referrer',redirect:'error',signal:controller.signal});
       if(!response.ok)throw new Error('unavailable');
       const result=await response.json();
       // Older gateways have no voice flag. A network error never means fallback.
       if(typeof result!=='object'||result===null)throw new Error('invalid');
-      this.voiceCapability=result.voiceConfigured===true;this.voiceStreaming=this.voiceCapability&&result.voiceStreaming===true;
+      // A newer authenticated chat reply wins over a slower earlier probe.
+      if(this.voiceCapabilityRevision!==revision)return this.voiceCapability;
+      this.voiceCapabilityRevision++;this.voiceCapability=result.voiceConfigured===true;this.voiceStreaming=this.voiceCapability&&result.voiceStreaming===true;
       this.voiceCapabilityAt=this.now();return this.voiceCapability;
     }catch{
+      if(!signal?.aborted&&this.voiceCapabilityRevision!==revision)return this.voiceCapability;
       throw new TeacherError(signal?.aborted?'cancelled':'voice_status',signal?.aborted?'已停止这次朗读。':'暂时无法确认语音连接，文字回答仍可使用。');
     }finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}
   }
@@ -184,6 +187,12 @@ export class TeacherClient {
     const result=await this.request('/api/chat',turn,signal);
     if(this.token!==requestToken)throw new TeacherError('cancelled','连接已退出，已停止显示这次回复。');
     if(typeof result.reply!=='string'||typeof result.conversationId!=='string')throw new TeacherError('network','这次没有收到完整回复，请稍后重试。');
+    // New gateways include current capability in the already-completed chat call.
+    // Older gateways retain the existing explicit health check. Never infer a
+    // fallback from a missing field or a network failure.
+    if(typeof result.voiceConfigured==='boolean'&&typeof result.voiceStreaming==='boolean'){
+      this.voiceCapabilityRevision++;this.voiceCapability=result.voiceConfigured;this.voiceStreaming=result.voiceConfigured&&result.voiceStreaming;this.voiceCapabilityAt=this.now();
+    }
     this.conversationId=result.conversationId;return result;
   }
 }

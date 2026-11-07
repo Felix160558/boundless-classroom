@@ -1,5 +1,12 @@
 # Boundless Classroom · Space Version
 
+## Quiet shape 31 · 2026-11-07
+
+Molecular geometry names now use English on the whiteboard (Bent, Linear, Trigonal pyramidal, Tetrahedral and appropriate local geometry for complex molecules). Remove geometry-name labels beneath 3D models; keep only the formula identifier. Preserve all original atom positions, bonds, dipoles, model rotation and character visuals. The teacher prompt requests English shape terminology, with a narrow client-side terminology normalizer for board text; ordinary explanations remain bilingual.
+
+Voice startup removes a redundant database lookup before atomic admission, carries voice capability in authenticated chat responses, and reduces the initial PCM buffer from 140 ms to 80 ms. Preserve the same voice, speech rate, one synthesis per answer, cancellation, manual Safari resume, bounded audio and shared RMB5/day admission. Actual network/provider latency and listening acceptance remain with the owner. No paid model or synthesis checks. Publication status is recorded separately; local implementation is not deployment evidence.
+
+
 ## All-subject classroom 30 · 2026-11-07
 
 This release supersedes version 29's fixed four-step molecular chapter. There is one open, all-subject conversation: remove the chapter launcher, chapter controls and subject tabs. Mathematics, physics and chemistry are teaching priorities, not mandatory routes. Keep the original cat, deep-space classroom, live translucent background and existing conversation/voice controls; the chat rail is smaller and quieter.
