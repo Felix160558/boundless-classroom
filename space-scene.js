@@ -1,5 +1,6 @@
 import * as THREE from './three.module.min.js';
 import {createCatTeacher} from './cat-teacher.js?v=teacher-presence-26';
+import {createMoleculeLesson} from './molecule-lesson.js?v=molecule-lesson-29';
 
 const TAU = Math.PI * 2;
 function seeded(seed=71){return()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};}
@@ -25,6 +26,8 @@ export function createSpace(container, onState=()=>{}) {
   const seatDirection=new THREE.Vector3(),xrHeadPosition=new THREE.Vector3(),xrForward=new THREE.Vector3();
   let seatBaseYaw=-.245,seatYaw=-.245,seatPitch=.065,desiredSeatYaw=-.245,desiredSeatPitch=.065,xrSeatPending=false;
   const room=new THREE.Group();scene.add(room);
+  const moleculeLesson=createMoleculeLesson(room);
+  let moleculeStep=null,moleculeDragging=false;
   let mode='home',zoom=1,dragX=0,dragY=0,pointerX=0,pointerY=0;
   let moving=false,lastX=0,lastY=0,lastTime=0,frameTime=0,session=null;
   let boardTitle='Stay curious.', boardSubtitle='Every question is a beginning.',boardLesson=null;
@@ -404,6 +407,11 @@ export function createSpace(container, onState=()=>{}) {
     if(mode==='home'){
       desiredPosition.set(portrait?15:12,portrait?12.2:9.2,portrait?22:18).multiplyScalar(zoom*portraitFit);
       desiredTarget.set(0,portrait?1.7:2.65,0);
+    }else if(moleculeStep!==null){
+      // The lesson is viewed nearly head-on: both molecules, the board and the
+      // original teacher remain in the same physical room, above the desk.
+      desiredPosition.set(.8,3.0,10.5).multiplyScalar(zoom*portraitFit);
+      desiredTarget.set(0,1.75,-.5);
     }else{
       desiredPosition.set(8.1,5.7,12.3).multiplyScalar(zoom);desiredTarget.set(0,1.35,0);
     }
@@ -419,14 +427,19 @@ export function createSpace(container, onState=()=>{}) {
   let previousPinch=0,tapCandidate=null,hovered=false,hoverStarted=0,lastLook=-10,teacherTime=0;
   const touches=new Map(),teacherRay=new THREE.Raycaster(),pointerNdc=new THREE.Vector2();
   const canvas=renderer.domElement;
-  function hitsTeacher(e,precise=false){
+  function pointerRay(e){
     const rect=canvas.getBoundingClientRect();
     pointerNdc.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);
-    camera.updateMatrixWorld();teacherRay.setFromCamera(pointerNdc,camera);
-    return teacher.hitTest(teacherRay,precise);
+    camera.updateMatrixWorld();room.updateMatrixWorld(true);teacherRay.setFromCamera(pointerNdc,camera);
+    return teacherRay;
+  }
+  function hitsTeacher(e,precise=false){return teacher.hitTest(pointerRay(e),precise);}
+  function hitsMolecule(e){
+    return moleculeStep!==null&&mode!=='home'&&moleculeLesson.hitTest(pointerRay(e));
   }
   function pointerDown(e){
     tapCandidate=touches.size===0?{id:e.pointerId,x:e.clientX,y:e.clientY,cancelled:false}:null;
+    moleculeDragging=touches.size===0&&hitsMolecule(e);
     hovered=false;
     moving=true;lastX=e.clientX;lastY=e.clientY;
     touches.set(e.pointerId,{x:e.clientX,y:e.clientY});canvas.setPointerCapture(e.pointerId);canvas.style.cursor='grabbing';
@@ -435,15 +448,19 @@ export function createSpace(container, onState=()=>{}) {
   function pointerMove(e){
     const rect=canvas.getBoundingClientRect();pointerX=(e.clientX-rect.left)/rect.width-.5;pointerY=(e.clientY-rect.top)/rect.height-.5;
     if(!moving){
-      const over=e.pointerType!=='touch'&&hitsTeacher(e);
+      const overMolecule=e.pointerType!=='touch'&&hitsMolecule(e);
+      const over=e.pointerType!=='touch'&&!overMolecule&&hitsTeacher(e);
       if(over&&!hovered)hoverStarted=teacherTime;hovered=over;
       canvas.style.cursor=over?'pointer':'grab';return;
     }
     if(tapCandidate&&Math.hypot(e.clientX-tapCandidate.x,e.clientY-tapCandidate.y)>8)tapCandidate.cancelled=true;
     if(touches.has(e.pointerId))touches.set(e.pointerId,{x:e.clientX,y:e.clientY});
     if(touches.size===2){
+      moleculeDragging=false;
       const p=[...touches.values()],distance=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y);
       if(mode!=='vr'&&previousPinch>0)zoom=THREE.MathUtils.clamp(zoom*previousPinch/Math.max(1,distance),.6,1.65);previousPinch=distance;
+    }else if(moleculeDragging){
+      moleculeLesson.rotate((e.clientX-lastX)*.006,(e.clientY-lastY)*.006);
     }else if(mode==='vr'){
       const yaw=dragX-(e.clientX-lastX)*.003;
       dragX=Math.atan2(Math.sin(yaw),Math.cos(yaw));
@@ -453,9 +470,11 @@ export function createSpace(container, onState=()=>{}) {
   }
   function pointerUp(e){
     const tap=e.type==='pointerup'&&tapCandidate?.id===e.pointerId&&!tapCandidate.cancelled&&touches.size===1;
+    const wasMoleculeDragging=moleculeDragging;
     touches.delete(e.pointerId);moving=touches.size>0;previousPinch=0;tapCandidate=null;
+    if(!moving)moleculeDragging=false;
     if(moving){const remaining=touches.values().next().value;lastX=remaining.x;lastY=remaining.y;}
-    if(tap&&hitsTeacher(e,true))teacher.react('tap');
+    if(tap&&!wasMoleculeDragging&&hitsTeacher(e,true))teacher.react('tap');
     canvas.style.cursor='grab';
   }
   function wheel(e){if(mode==='home')return;e.preventDefault();if(mode==='vr')return;zoom=THREE.MathUtils.clamp(zoom+e.deltaY*.0005,.6,1.65);pose();}
@@ -467,6 +486,11 @@ export function createSpace(container, onState=()=>{}) {
   canvas.addEventListener('webglcontextrestored',()=>onState('restored'));
 
   container.addEventListener('keydown',e=>{
+    if(mode==='classroom'&&moleculeStep!==null&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){
+      e.preventDefault();
+      moleculeLesson.rotate(e.key==='ArrowLeft'?-.12:e.key==='ArrowRight'?.12:0,e.key==='ArrowUp'?-.12:e.key==='ArrowDown'?.12:0);
+      return;
+    }
     if(mode!=='vr'||renderer.xr.isPresenting||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))return;
     e.preventDefault();
     if(e.key==='ArrowLeft')dragX-=.075;if(e.key==='ArrowRight')dragX+=.075;
@@ -478,13 +502,25 @@ export function createSpace(container, onState=()=>{}) {
     const wasSeated=mode==='vr';mode=next;zoom=1;dragX=dragY=0;
     if(mode==='vr'){seatBaseYaw=container.clientWidth<650?-.45:-.245;room.position.y=0;}
     placeTeacher(mode==='vr');teacher.setClassroomMode(mode==='classroom'||mode==='vr');
-    container.tabIndex=mode==='vr'?0:-1;container.setAttribute('role',mode==='vr'?'region':'img');
+    moleculeLesson.setStep(mode==='home'?null:moleculeStep);
+    container.tabIndex=mode==='vr'||moleculeStep!==null&&mode==='classroom'?0:-1;container.setAttribute('role',container.tabIndex===0?'region':'img');
     pose();
     // Enter/leave directly at the seat, never fly through the desk or glass.
     if(wasSeated||mode==='vr')snapView();
   }
   function setBoard(title,subtitle){boardLesson=null;boardTitle=title;boardSubtitle=subtitle;drawBoard();}
   function setLesson(notes){boardLesson={title:notes.title,points:notes.points.slice(0,3)};drawBoard();}
+  function setMoleculeLesson(step){
+    const next=Number.isInteger(step)&&step>=0&&step<=3?step:null;
+    if(next===moleculeStep)return;
+    const starting=moleculeStep===null&&next!==null;
+    moleculeStep=next;moleculeLesson.setStep(mode==='home'?null:next);
+    moleculeDragging=false;
+    if(starting&&mode==='classroom'){zoom=1;dragX=dragY=0;}
+    container.tabIndex=mode==='vr'||moleculeStep!==null&&mode==='classroom'?0:-1;
+    container.setAttribute('role',container.tabIndex===0?'region':'img');
+    pose();
+  }
   renderer.setAnimationLoop((time,xrFrame)=>{
     // Render capped at 40fps outside XR; pause animation work while the tab is hidden.
     if(document.hidden&&!renderer.xr.isPresenting)return;
@@ -506,6 +542,7 @@ export function createSpace(container, onState=()=>{}) {
       teacher.react('look',pointerX*2);lastLook=teacherTime;hoverStarted=Infinity;
     }
     teacher.update(dt,{reducedMotion:reduceMotion.matches,xr:mode==='vr'||renderer.xr.isPresenting,time:time/1000});
+    moleculeLesson.update(reduceMotion.matches?0:time/1000,dt);
     if(!reduceMotion.matches&&!renderer.xr.isPresenting)skyTime.value+=dt;
     for(const layer of ribbonLayers){layer.mesh.position.y=Math.sin(skyTime.value*.06+layer.phase)*.65;layer.mesh.material.opacity=layer.opacity*(.95+.05*Math.sin(skyTime.value*.09+layer.phase));}
     glints.forEach((glint,i)=>{glint.material.opacity=.49+.10*Math.sin(skyTime.value*.42+i*2);});
@@ -541,5 +578,5 @@ export function createSpace(container, onState=()=>{}) {
   }
   onState('ready');
   teacher.load();
-  return {setMode,setBoard,setLesson,resize,greetTeacher:()=>teacher.react('tap'),setTeacherSpeech:event=>teacher.setSpeech(event),setTeacherLearningState:state=>teacher.setLearningState(state),immersiveSupported,enterImmersive,async endImmersive(){if(session)await session.end();}};
+  return {setMode,setBoard,setLesson,setMoleculeLesson,resize,greetTeacher:()=>teacher.react('tap'),setTeacherSpeech:event=>teacher.setSpeech(event),setTeacherLearningState:state=>teacher.setLearningState(state),immersiveSupported,enterImmersive,async endImmersive(){if(session)await session.end();}};
 }

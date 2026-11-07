@@ -132,3 +132,33 @@ body[data-mode=vr] #universe:focus{outline:none}
 .compose .composer-shell:focus-within{background:rgba(8,13,21,.34);border-color:rgba(219,208,185,.43)}
 .compose-footer p,.compose-footer button,.dictation-row{text-shadow:0 1px 7px #000a}
 @media(max-width:600px){.chat-panel{border:0}.chat-header{padding:16px 20px 12px;gap:12px}.teacher-avatar{flex-basis:60px;width:60px;height:68px}.teacher-intro{padding-left:12px}.chat-header h2{font-size:19px}.teacher-title-row{gap:9px}.chat-header p{font-size:11px;margin-top:8px}.teacher-session-actions{padding:0 22px 12px}.compose .composer-shell{border-radius:19px}}
+
+/* A quiet lesson strip within the existing translucent chat rail. */
+.molecule-entry{padding:0 27px 13px;flex:none}
+.molecule-entry button{width:100%;text-align:left;color:#d9c8a7;font:400 14px Georgia,serif;padding:10px 0;border-top:1px solid #c7cbd21a;border-bottom:1px solid #c7cbd21a;letter-spacing:.035em}
+.molecule-entry span{float:right;color:#a7afb9;font:10px Arial,sans-serif;letter-spacing:.06em;padding-top:2px}
+.molecule-entry button:hover{color:#f1e4ce}
+.molecule-controls{margin:0 27px 6px;padding:10px 0 8px;border-top:1px solid #c7cbd226;border-bottom:1px solid #c7cbd21a;flex:none;background:transparent}
+.molecule-heading,.molecule-actions{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.molecule-heading>span{font:400 16px Georgia,serif;color:#e3d6c0;letter-spacing:.04em}
+.molecule-heading button{font-size:10px;color:#9ca7b5;padding:6px 0 6px 10px}
+#molecule-step-label{color:#c1c8d0;font-size:11px;line-height:1.6;margin:9px 0 8px;letter-spacing:.03em}
+.molecule-actions button{font-size:11px;color:#b8c0cc;padding:7px 0;min-height:30px}
+.molecule-actions #molecule-next{color:#e1cfad}
+.molecule-actions button:hover,.molecule-heading button:hover{color:#fff0d7}
+.molecule-actions button:disabled{cursor:default}
+.molecule-hint{font-size:9px;color:#8994a2;margin:6px 0 0;line-height:1.5}
+body[data-molecule-lesson=true] .room-caption{display:none}
+body[data-molecule-lesson=true] .subject-tabs{display:none}
+body[data-molecule-lesson=true] .chat-header{padding-top:17px;padding-bottom:12px}
+body[data-molecule-lesson=true] .teacher-session-actions{padding-bottom:9px}
+@media(max-width:600px){
+  .molecule-entry{padding:0 22px 8px}
+  .molecule-controls{margin:0 22px 3px;padding:7px 0}
+  body[data-molecule-lesson=true] .chat-header{display:none}
+  body[data-molecule-lesson=true] .teacher-session-actions{padding-top:9px;padding-bottom:7px}
+  .molecule-heading>span{font-size:14px}
+  #molecule-step-label{margin:3px 0;font-size:10px}
+  .molecule-actions button{padding:4px 0;min-height:28px}
+  .molecule-hint{display:none}
+}

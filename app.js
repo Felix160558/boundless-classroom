@@ -1,4 +1,5 @@
 import {topics,respond} from './tutor.js';
+import {moleculeSteps,moleculeQuestion} from './molecule-lesson-content.js?v=molecular-classroom-29';
 import {teacher} from './teacher-client.js?v=smooth-voice-28';
 import {createTeacherVoice} from './teacher-voice.js?v=smooth-voice-28';
 import {renderTeacherReply,lessonNotes} from './teacher-content.js?v=gentle-board-13';
@@ -6,6 +7,7 @@ import {renderTeacherReply,lessonNotes} from './teacher-content.js?v=gentle-boar
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 let space=null,topic='free',pending=false,voice=false,currentMode='home',xrSupported=false;
 let toastTimer=null;
+let moleculeStep=null,moleculeReplyBoard=null,moleculeNarration=null;
 let activeReply=null;
 let dictation=null,dictationFailure='',voiceSubmit=false;
 let readAloud=null,readAloudGeneration=0,cloudVoice=null,voiceProbe=null,voiceSource=null,browserVoiceNoticeShown=false;
@@ -27,7 +29,7 @@ function syncTeacherLearningState(){
 }
 const lessonBoards=new Map();
 function syncBoard(){
-  const notes=lessonBoards.get(topic);
+  const notes=moleculeStep===null?lessonBoards.get(topic):(moleculeReplyBoard||moleculeSteps[moleculeStep].board);
   const accessible=$('#whiteboard-notes');
   accessible.hidden=currentMode==='home'||!notes;
   if(notes){
@@ -57,6 +59,7 @@ function updateMode(){
   space?.setMode(currentMode);
   $('#universe').setAttribute('aria-label',currentMode==='vr'?'你坐在课桌前，面前是猫老师与白板，左右和头顶是通向星空的玻璃。拖动或使用方向键环视。':defaultSceneDescription);
   $('#back-home').lastChild.textContent=currentMode==='vr'?' 离开教室':' 返回太空';
+  syncMoleculeUI();
   syncBoard();
   syncComposer();
   if(currentMode==='classroom')$('#chat-input').focus({preventScroll:true});
@@ -128,6 +131,7 @@ function addMessage(who,text,mine=false,rich=false){
 }
 function teacherLabel(){return teacher.configured?'猫老师 · AI':'猫老师 · 离线示例';}
 function greeting(){
+  closeMoleculeLesson();
   learningRest='idle';cancelReadAloud();syncTeacherLearningState();
   lessonBoards.clear();syncBoard();
   $('#messages').replaceChildren();
@@ -171,6 +175,8 @@ $('#chat-cancel').addEventListener('click',()=>{learningRest='idle';cancelReadAl
 updateConnection();
 if(teacher.configured)greeting();
 $$('.subject-button').forEach(btn=>btn.addEventListener('click',()=>{
+  if(pending&&moleculeStep!==null)return;
+  closeMoleculeLesson();
   learningRest='idle';cancelReadAloud();
   dictation?.cancel();dictation?.forget();
   topic=btn.dataset.topic;$$('.subject-button').forEach(b=>{b.classList.toggle('active',b===btn);b.setAttribute('aria-pressed',String(b===btn));});
@@ -178,6 +184,64 @@ $$('.subject-button').forEach(btn=>btn.addEventListener('click',()=>{
   addMessage(teacher.configured?'学习主题':'猫老师 · 离线示例','我们来探索'+topics[topic].name+'。\n你可以问：'+topics[topic].prompt);
   syncTeacherLearningState();
 }));
+function syncMoleculeUI(){
+  const active=moleculeStep!==null;
+  document.body.dataset.moleculeLesson=String(active&&currentMode!=='home');
+  $('#molecule-entry').hidden=active;
+  $('#molecule-controls').hidden=!active;
+  $('#molecule-start').disabled=pending;
+  if(active&&currentMode!=='home')$('#universe').setAttribute('aria-label','猫老师与白板前悬浮着水和二氧化碳的三维球棍模型。拖动分子观察；在普通课堂中也可聚焦此区域后使用方向键旋转。');
+  else if(currentMode==='classroom')$('#universe').setAttribute('aria-label',defaultSceneDescription);
+  if(active){
+    $('#molecule-step-label').textContent=String(moleculeStep+1).padStart(2,'0')+' / 04 · '+moleculeSteps[moleculeStep].title;
+    $('#molecule-prev').disabled=pending||moleculeStep===0;
+    $('#molecule-next').disabled=pending;
+    $('#molecule-next').textContent=moleculeStep===3?'完成':'下一步';
+    $('#molecule-close').disabled=pending;
+    $('#molecule-listen').disabled=pending;
+  }
+  space?.setMoleculeLesson?.(moleculeStep);
+}
+function closeMoleculeLesson(){
+  if(moleculeStep===null)return;
+  cancelReadAloud();moleculeStep=null;moleculeReplyBoard=null;moleculeNarration=null;
+  $('#chat-input').placeholder=topics[topic].prompt;
+  syncMoleculeUI();syncBoard();
+}
+function showMoleculeStep(index,{narrate=true}={}){
+  if(pending||!moleculeSteps[index])return;
+  cancelReadAloud();dictation?.cancel();dictation?.forget();
+  moleculeStep=index;moleculeReplyBoard=null;topic='chem';
+  $$('.subject-button').forEach(button=>{const chosen=button.dataset.topic==='chem';button.classList.toggle('active',chosen);button.setAttribute('aria-pressed',String(chosen));});
+  $('#chat-input').placeholder='关于这两个分子，你想问什么？';
+  syncMoleculeUI();syncBoard();
+  const step=moleculeSteps[index];
+  // Retain the conversation while keeping just one current guided explanation.
+  moleculeNarration?.remove();
+  moleculeNarration=addMessage('猫老师 · 引导讲解',step.text,false,true);
+  learningRest='settled';syncTeacherLearningState();
+  if(currentMode==='classroom')setTeacherLearningState('responding');
+  if(narrate&&voice&&(!teacher.configured||teacher.connected)){
+    cloudVoice?.unlock();void speak(step.text);
+  }
+}
+$('#molecule-start').addEventListener('click',()=>showMoleculeStep(0));
+$('#molecule-prev').addEventListener('click',()=>showMoleculeStep(moleculeStep-1));
+$('#molecule-next').addEventListener('click',()=>{if(moleculeStep===3)closeMoleculeLesson();else showMoleculeStep(moleculeStep+1);});
+$('#molecule-close').addEventListener('click',closeMoleculeLesson);
+$('#molecule-listen').addEventListener('click',()=>{
+  if(moleculeStep===null||pending)return;
+  if(teacher.configured&&!teacher.connected){openTeacherConnection();return;}
+  const text=moleculeSteps[moleculeStep].text;
+  if(cloudVoice?.snapshot()?.text===text||readAloud?.text===text){
+    if(cloudVoice?.waitingForTap)cloudVoice.resume();else cancelReadAloud();
+    return;
+  }
+  cancelReadAloud();dictation?.cancel();
+  voice=true;try{localStorage.setItem(voicePreferenceKey,'on');}catch{}
+  cloudVoice?.unlock();renderVoiceControl();void speak(moleculeSteps[moleculeStep].text);
+});
+
 function syncComposer(){
   const input=$('#chat-input');input.style.height='auto';input.style.height=Math.min(132,input.scrollHeight)+'px';
   $('.send').disabled=pending||voiceSubmit||!input.value.trim();
@@ -221,7 +285,7 @@ $('#chat-input').addEventListener('focus',syncTeacherLearningState);
 $('#chat-input').addEventListener('blur',syncTeacherLearningState);
 window.addEventListener('pagehide',()=>{dictation?.cancel();cancelReadAloud();setTeacherLearningState('idle');});
 window.addEventListener('pageshow',syncTeacherLearningState);
-function setTeacherSpeech(type,detail={}){space?.setTeacherSpeech?.({type,...detail});}
+function setTeacherSpeech(type,detail={}){space?.setTeacherSpeech?.({type,...detail});renderMoleculeVoice();}
 function cancelReadAloud(){
   // Invalidate first: Safari may deliver a cancelled utterance's end/error late.
   readAloudGeneration++;readAloud=null;voiceProbe?.abort();voiceProbe=null;cloudVoice?.cancel();setTeacherSpeech('stop');
@@ -263,7 +327,14 @@ function speakBrowser(text){
   }catch{cancelReadAloud();toast('当前浏览器未能朗读。');}
 }
 function voiceAllowed(){return voice&&currentMode==='classroom'&&!document.hidden&&!dictation?.active;}
+function renderMoleculeVoice(){
+  if(moleculeStep===null)return;
+  const text=moleculeSteps[moleculeStep].text;
+  const same=cloudVoice?.snapshot()?.text===text||readAloud?.text===text;
+  $('#molecule-listen').textContent=same?(cloudVoice?.waitingForTap?'点击播放':'停止讲解'):'听讲解';
+}
 function renderVoiceControl(){
+  renderMoleculeVoice();
   const button=$('#voice-btn'),blocked=cloudVoice?.waitingForTap,preparing=cloudVoice?.state==='preparing';
   button.textContent=blocked?'点击播放':preparing?'准备声音…':'朗读：'+(voice?(voiceSource==='system'?'系统':'开'):'关');
   button.setAttribute('aria-pressed',String(voice));
@@ -305,14 +376,15 @@ $('#voice-btn').addEventListener('click',()=>{
   }).catch(error=>{if(voice)toast(error.message);});
 });
 
-async function runTurn(turn,retry=false){
+async function runTurn(turn,retry=false,displayQuestion=turn.message){
   if(pending)return;
   learningRest='idle';cancelReadAloud();
   dictation?.cancel();dictation?.forget();
-  const input=$('#chat-input');pending=true;$('.send').disabled=true;$('#chat-reset').disabled=true;
-  if(retry&&input.value.trim()===turn.message)input.value='';
+  const turnLessonStep=moleculeStep;
+  const input=$('#chat-input');pending=true;syncMoleculeUI();$('.send').disabled=true;$('#chat-reset').disabled=true;
+  if(retry&&input.value.trim()===displayQuestion)input.value='';
   $$('.retry-message').forEach(button=>{button.disabled=true;});
-  if(!retry)addMessage('你',turn.message,true);
+  if(!retry)addMessage('你',displayQuestion,true);
   const typing=addMessage(teacher.configured?'猫老师 · 正在想一想':'猫老师 · 准备示例中','⋯');typing.classList.add('thinking-message');
   $('#messages').setAttribute('aria-busy','true');
   activeReply=new AbortController();$('#chat-cancel').hidden=!teacher.configured;syncTeacherLearningState();
@@ -326,32 +398,34 @@ async function runTurn(turn,retry=false){
       const result=await teacher.send(turn,{signal:activeReply.signal});answer=result.reply;notes=lessonNotes(answer,result.board);
       if(result.contextTrimmed)toast('较早的对话已移出当前上下文，需要时可以再提醒猫老师。');
       if(result.finishReason==='length')toast('这次回答达到了长度上限，可以接着追问。');
-    }else{await new Promise(resolve=>setTimeout(resolve,650));answer=respond(turn.message,turn.topic);notes=lessonNotes(answer);}
+    }else{await new Promise(resolve=>setTimeout(resolve,650));answer=respond(displayQuestion,turn.topic);notes=lessonNotes(answer);}
     typing.remove();addMessage(teacherLabel(),answer,false,true);
-    if(notes)lessonBoards.set(turn.topic,notes);else lessonBoards.delete(turn.topic);syncBoard();
+    if(notes)lessonBoards.set(turn.topic,notes);else lessonBoards.delete(turn.topic);
+    if(moleculeStep!==null&&moleculeStep===turnLessonStep)moleculeReplyBoard=notes;
+    syncBoard();
     learningRest='settled';
     // One acknowledgement for the completed answer, never a tap/wink per reply.
     if(currentMode!=='home'&&!document.hidden&&!connectDialog.open)setTeacherLearningState('responding');
     if(currentMode==='classroom')speak(answer);
   }catch(error){
     learningRest='idle';
-    if(teacher.configured&&teacher.token!==replyConnection){typing.remove();if(error.code==='unauthorized'){if(!input.value)input.value=turn.message;openTeacherConnection();}return;}
+    if(teacher.configured&&teacher.token!==replyConnection){typing.remove();if(error.code==='unauthorized'){if(!input.value)input.value=displayQuestion;openTeacherConnection();}return;}
     typing.remove();const item=addMessage('连接提示',error.message);item.classList.add('message-error');
     if(error.code==='unauthorized')openTeacherConnection();
     else if(error.code==='expired'){
-      const fresh=document.createElement('button');fresh.type='button';fresh.className='retry-message';fresh.textContent='开始新对话';fresh.addEventListener('click',()=>{if(pending)return;teacher.reset();greeting();input.value=turn.message;});item.append(fresh);
+      const fresh=document.createElement('button');fresh.type='button';fresh.className='retry-message';fresh.textContent='开始新对话';fresh.addEventListener('click',()=>{if(pending)return;teacher.reset();greeting();input.value=displayQuestion;});item.append(fresh);
     }else if(!['daily_limit','duplicate','invalid','cancelled'].includes(error.code)){
       const again=document.createElement('button');again.type='button';again.className='retry-message';again.textContent='重试';again.addEventListener('click',()=>{
         item.remove();
         // A confirmed provider failure is finished: an explicit retry needs a new ID.
         // Uncertain network failures keep the old ID to recover a result without double billing.
         const retryTurn=['empty_reply','provider_error','provider_busy','provider_config'].includes(error.code)?{...turn,requestId:crypto.randomUUID()}:turn;
-        runTurn(retryTurn,true);
+        runTurn(retryTurn,true,displayQuestion);
       });item.append(again);
     }
-    if(!input.value)input.value=turn.message;
+    if(!input.value)input.value=displayQuestion;
   }finally{
-    pending=false;activeReply=null;syncComposer();$('#chat-reset').disabled=false;$('#chat-cancel').hidden=true;
+    pending=false;activeReply=null;syncMoleculeUI();syncComposer();$('#chat-reset').disabled=false;$('#chat-cancel').hidden=true;
     $('#messages').setAttribute('aria-busy','false');updateConnection();if(currentMode==='classroom')input.focus({preventScroll:true});
   }
 }
@@ -364,7 +438,9 @@ $('#chat-form').addEventListener('submit',async e=>{
     const input=$('#chat-input'),question=input.value.trim();
     if(!question||currentMode!=='classroom')return;
     if(teacher.configured&&!teacher.connected){openTeacherConnection();return;}
-    const turn=teacher.turn(question,topic);input.value='';syncComposer();void runTurn(turn);
+    const contextualQuestion=moleculeQuestion(question,moleculeStep);
+    if(contextualQuestion.length>4000){toast('这条问题有些长，请缩短一点再发给猫老师。');return;}
+    const turn=teacher.turn(contextualQuestion,topic);input.value='';syncComposer();void runTurn(turn,false,question);
   }finally{voiceSubmit=false;syncComposer();}
 });
 $('#chat-input').addEventListener('keydown',e=>{
@@ -392,7 +468,7 @@ function fallback(message){
 const sceneStartupTimer=setTimeout(()=>{
   if(!space)fallback('三维教室资源载入较慢，可刷新重试。文字课堂和预约仍可使用。');
 },45000);
-import('./space-scene.js?v=teacher-presence-26').then(async({createSpace})=>{
+import('./space-scene.js?v=molecular-classroom-29').then(async({createSpace})=>{
   clearTimeout(sceneStartupTimer);
   space=createSpace($('#universe'),(state,detail)=>{
     if(state==='ready'){
@@ -433,3 +509,9 @@ import('./space-scene.js?v=teacher-presence-26').then(async({createSpace})=>{
   updateMode();xrSupported=await space.immersiveSupported();
   if(xrSupported){$('#immersive-btn').textContent='进入头显 ↗';$('#xr-status').textContent='课桌座位视角，设备支持实验性单人头显入口。';}
 }).catch(()=>{clearTimeout(sceneStartupTimer);fallback('三维教室暂未载入，请刷新重试。文字课堂和预约仍可使用。');});
+
+// Shareable lesson entry shows the first step without requesting paid audio on load.
+if(new URLSearchParams(location.search).get('lesson')==='polarity'){
+  if(currentMode==='home')navigate('classroom');
+  showMoleculeStep(0,{narrate:false});
+}

@@ -1,5 +1,11 @@
 # Boundless Classroom · Space Version
 
+## Molecular classroom 29 · 2026-11-07
+
+A four-step H₂O / CO₂ comparison lesson lives inside the existing classroom chat rail. Molecules are actual Three.js objects from ChemBoard atom/bond data; students can drag them, see bond-polarity arrows, compare cancellation/resultant direction and read synchronized whiteboard notes. The cat presents a curated script, clearly labelled guided narration. Optional reading uses the existing authenticated/budgeted cloned-voice path; entering a shared lesson link never starts paid audio automatically. Follow-up questions carry bounded current-step context through the existing chat contract; the model is not claimed to see or manipulate the scene. No backend deployment needed.
+
+Water's imported conformer (~103.98°) is slightly idealized to the reference 104.5° for this teaching display, preserving original source coordinates in code and individual bond lengths. CO₂ is linear. Chemical arrows point positive-tail to negative-head; their lengths are qualitative and not computed dipole magnitudes. Raw SDF partial charges are deliberately unused. All original character assets, homepage, glass room, voice identity, access and daily RMB5 cap remain. Current step/models/board carry into the existing seated VR view; no new XR input or spatial audio. Owner handles visual/audio/device checks. Static allowlist: 31 files. Release details are recorded privately.
+
 ## Smooth voice 28
 
 Preserves the existing classroom and cloned voice. Supports opt-in PCM streaming from the authenticated gateway so playback can begin before the full answer audio arrives. One synthesis request is made per answer; cancellation and manual Safari resume never start a replacement paid request. Older gateways or browsers without WebAudio retain the complete MP3 path. The voice capability check starts while the text response is being prepared. Real latency, audio and device acceptance remain with the owner.
