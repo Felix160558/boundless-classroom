@@ -165,6 +165,14 @@ body[data-molecule-active=true] .room-caption{display:none}
 /* Attachments stay inside the existing quiet composer; controls appear only when needed. */
 .attachment-button{flex:none;align-self:flex-end;width:28px;height:34px;margin-left:-5px;border:0;border-radius:50%;background:transparent;color:#aeb9c9;font-size:22px;font-weight:300;line-height:1}
 .attachment-button:hover{color:#e6dfd1;background:rgba(214,225,240,.055)}.attachment-button:disabled{opacity:.35;cursor:default}
+/* Full-width draft above the controls. Reserve their row outside the scrolling
+   textarea so long drafts cannot pass underneath the plus or send button.
+   The reserved row + one text line keep the original 50px / 48px empty height. */
+.compose .composer-shell{position:relative;padding-bottom:39.55px}
+.compose textarea{width:100%;min-height:21.45px;max-height:103.45px;padding:0}
+.compose .attachment-button{position:absolute;left:11px;bottom:11px;margin-left:0;z-index:1}
+.compose .composer-actions{position:absolute;right:11px;bottom:11px;z-index:1}
+@media(max-width:600px){.compose .composer-shell{padding-bottom:34px}.compose textarea{min-height:24px;max-height:84px}.compose .attachment-button{left:9px;bottom:10px}.compose .composer-actions{right:10px;bottom:10px}}
 .compose.attachment-dragover .composer-shell{border-color:rgba(219,208,185,.65);background:rgba(218,230,247,.065)}
 .attachment-previews{display:flex;gap:8px;overflow-x:auto;padding:0 0 10px;scrollbar-width:thin}
 .attachment-preview{position:relative;flex:0 0 78px;min-width:0;display:flex;flex-direction:column;gap:4px}
