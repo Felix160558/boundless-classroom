@@ -1,7 +1,7 @@
 import * as THREE from '../three.module.min.js';
 import {createSpaceSky} from '../space-sky.js?v=medieval-lounge-40';
 import {createStationCabin} from './station-cabin.js?v=medieval-lounge-40';
-import {createCastleLounge} from './castle-lounge.js?v=medieval-lounge-40';
+import {createCastleLounge} from './castle-lounge.js?v=star-window-41';
 
 export const stationView = {
   ready:false,
@@ -130,8 +130,10 @@ function startStation() {
     camera.aspect=width/height;
     camera.fov=width<680?65:classroom?51:55;
     camera.updateProjectionMatrix();
-    scene.background.set(classroom?'#07090e':'#211b16');
-    galaxy.visible=classroom;
+    // The same live, three-dimensional sky is outside both rooms. Opaque
+    // castle masonry still occludes it; the rear glazing opens onto it.
+    scene.background.set('#07090e');
+    galaxy.visible=true;
     lounge.group.visible=!classroom;
     cabin.group.visible=classroom;
     sky.resize(height,renderer.getPixelRatio());
@@ -140,7 +142,7 @@ function startStation() {
     positionPortraitButtons();
     needsFrame=true;
   }
-  scene.background=new THREE.Color('#211b16');
+  scene.background=new THREE.Color('#07090e');
 
   function scheduleLayout() {
     if (layoutRequest===null) layoutRequest=requestAnimationFrame(layout);
@@ -307,8 +309,8 @@ function startStation() {
     if (!immersive&&reduce.matches&&!preview&&!inClassroom()&&!needsFrame) return;
     lastFrame=time;needsFrame=false;
     const elapsed=Math.max(0,Math.min(since/1000,.05));
+    sky.update(reduce.matches?0:elapsed);
     if (inClassroom()) {
-      sky.update(reduce.matches?0:elapsed);
       cabin.update(time,elapsed,preview);
     } else lounge.update(time,elapsed,reduce.matches);
     renderer.render(scene,camera);

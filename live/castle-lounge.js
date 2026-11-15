@@ -142,11 +142,11 @@ export function createCastleLounge(scene) {
   // The room envelope and a continuous barrel vault, with dressed stone ribs.
   const floorMap=stoneMap.clone();floorMap.repeat.set(5,7);floorMap.needsUpdate=true;
   const floorMaterial=mat('#b9b1a0',{map:floorMap,bumpMap:floorMap,bumpScale:.035,roughness:.94});
-  box(13.6, .24, 18, 0, floorY - .12, -2, darkStone);
-  const flags=make(new THREE.PlaneGeometry(13.3,18),floorMaterial,0,floorY+.002,-2);flags.rotation.x=-Math.PI/2;
+  box(13.6, .24, 16.2, 0, floorY - .12, -2.9, darkStone);
+  const flags=make(new THREE.PlaneGeometry(13.3,16.2),floorMaterial,0,floorY+.002,-2.9);flags.rotation.x=-Math.PI/2;
   box(13.6, 7.5, .5, 0, 1.75, -7.65, stone);
-  box(.45, 7.5, 18, -6.8, 1.75, -2, stone);
-  box(.45, 7.5, 18, 6.8, 1.75, -2, stone);
+  box(.45, 7.5, 16.2, -6.8, 1.75, -2.9, stone);
+  box(.45, 7.5, 16.2, 6.8, 1.75, -2.9, stone);
   const vaultVertices = [], vaultUVs = [], vaultIndices = [];
   for (let i = 0; i <= 64; i++) {
     const a = i / 64 * Math.PI;
@@ -173,6 +173,34 @@ export function createCastleLounge(scene) {
       box(.55, .17, .53, side * 6.34, floorY + .09, z + .12, darkStone);
     }
   }
+  // The rear terminates in an open arched outlook. This is clear 3D glazing:
+  // the shared animated galaxy remains visible through it, with no backdrop image.
+  const outlook=new THREE.Group();outlook.name='Rear panoramic starfield window';group.add(outlook);
+  const rearZ=4.94, spring=1.58, innerRX=6.31, innerRY=3.60;
+  stoneArch(0,spring,rearZ,6.55,3.84,.22,.24,29,outlook);
+  for(const side of [-1,1]){
+    for(let row=0;row<7;row++)box(.32,.487,.34,side*6.48,floorY+.25+row*.5,rearZ+.10,cutStone,outlook);
+    plank(.12,3.45,.14,side*6.28,floorY+1.725,rearZ+.10,outlook,darkWood);
+  }
+  plank(12.7,.14,.24,0,floorY+.095,rearZ+.10,outlook,darkWood);
+  const windowShape=new THREE.Shape();
+  windowShape.moveTo(-innerRX,floorY+.16);
+  windowShape.lineTo(innerRX,floorY+.16);
+  windowShape.lineTo(innerRX,spring);
+  windowShape.absellipse(0,spring,innerRX,innerRY,0,Math.PI,false);
+  windowShape.closePath();
+  const clearGlass=new THREE.MeshPhysicalMaterial({
+    color:'#b8c7d2',transparent:true,opacity:.026,roughness:.12,metalness:.02,
+    clearcoat:.45,clearcoatRoughness:.12,side:THREE.DoubleSide,depthWrite:false,
+  });
+  const rearGlass=make(new THREE.ShapeGeometry(windowShape,64),clearGlass,0,0,rearZ+.105,outlook);
+  rearGlass.name='Clear rear glazing';rearGlass.castShadow=false;rearGlass.receiveShadow=false;
+  const edgePoints=[new THREE.Vector3(-innerRX,floorY+.16,rearZ+.095),new THREE.Vector3(-innerRX,spring,rearZ+.095)];
+  for(let i=64;i>=0;i--){const angle=i/64*Math.PI;edgePoints.push(new THREE.Vector3(Math.cos(angle)*innerRX,spring+Math.sin(angle)*innerRY,rearZ+.095));}
+  edgePoints.push(new THREE.Vector3(innerRX,floorY+.16,rearZ+.095));
+  const glassEdge=new THREE.Line(new THREE.BufferGeometry().setFromPoints(edgePoints),new THREE.LineBasicMaterial({color:'#b8c7d2',transparent:true,opacity:.18,depthWrite:false}));
+  outlook.add(glassEdge);
+
   // Pegged oak planks and low rails, with no upholstered or decorative salon fittings.
   for(let i=0;i<42;i++){
     const x=-6.4+i*.31,height=.81+random()*.025;

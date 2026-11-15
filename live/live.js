@@ -5,7 +5,7 @@ import {createRoomCast} from './room-cast.js?v=station-room-38';
 import {createRoomPointer} from './room-pointer.js?v=station-room-38';
 import {mountAppointment} from './appointment.js?v=medieval-lounge-40';
 import {mountRoomInvitation, roomCodeFromURL} from './room-invitation.js?v=medieval-lounge-40';
-import {stationView} from './room-sky.js?v=medieval-lounge-40';
+import {stationView} from './room-sky.js?v=star-window-41';
 import {createPreviewRoom, isPagesPreview, PREVIEW_NOTICE} from './preview-room.js?v=medieval-lounge-40';
 
 const soloPreview = isPagesPreview(window.location.hostname);
