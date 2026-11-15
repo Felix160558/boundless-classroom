@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
+  <title>The Common Room · Boundless Classroom</title>
+  <link rel="stylesheet" href="./live.css?v=medieval-lounge-40">
+  <link rel="stylesheet" href="./room-pointer.css?v=medieval-lounge-40">
+</head>
+<body data-station="lounge">
+  <div id="room-sky" aria-hidden="true"></div>
+  <header class="topbar">
+    <a class="brand" href="../#home" aria-label="Boundless Classroom home">
+      <span class="brand-mark" aria-hidden="true">∞</span>
+      <span>BOUNDLESS<small>CLASSROOM</small></span>
+    </a>
+    <span class="preview-label" id="preview-label">RESERVATION</span>
+    <div class="room-header" id="room-header" hidden>
+      <p id="connection-status" role="status"></p>
+      <button id="room-title" type="button" title="Copy Room Code"></button>
+      <button id="share-room" type="button">Share Link</button>
+    </div>
+    <button id="center-station" type="button" hidden>Center View</button>
+    <button id="station-vr" class="vr-entry" type="button" aria-pressed="false">Enter VR</button>
+    <a id="leave" href="../#home">Exit to Home</a>
+  </header>
+
+  <nav id="portrait-gallery" class="portrait-gallery" aria-label="Teacher portraits">
+    <button class="portrait-hotspot" data-teacher="teacher-1" type="button" aria-label="Open first teacher profile"></button>
+    <button class="portrait-hotspot" data-teacher="teacher-2" type="button" aria-label="Open second teacher profile"></button>
+    <button class="portrait-hotspot" data-teacher="teacher-3" type="button" aria-label="Open third teacher profile"></button>
+  </nav>
+  <main>
+    <section id="lobby" class="lounge" aria-labelledby="lounge-title">
+      <div class="arrival">
+        <h1 id="lounge-title">The Common<br><em>Room.</em></h1>
+        <div class="lounge-actions">
+          <button id="create-room" class="primary" type="button">Create Room</button>
+          <button id="open-appointment" type="button">Reserve a Time</button>
+          <button id="choose-live" type="button">Join by Code</button>
+        </div>
+        <div class="appointment-summary" id="appointment-summary" hidden>
+          <div class="appointment-details">
+            <strong id="appointment-label"></strong>
+            <time id="appointment-when"></time>
+          </div>
+          <button id="appointment-copy" type="button">Share Invitation</button>
+          <button id="appointment-open" type="button">Open Classroom</button>
+        </div>
+        <p class="lobby-status" id="lobby-status" role="status"></p>
+        <p class="lounge-hint">Drag to look around · Select a portrait</p>
+      </div>
+    </section>
+
+    <section id="room" class="classroom" aria-label="One-to-One Classroom" tabindex="-1" hidden>
+      <div class="workspace" id="workspace">
+        <figure class="portrait self-portrait" id="local-display" hidden>
+          <div class="portrait-image">
+            <video id="local-video" autoplay muted playsinline aria-label="Your camera"></video>
+          </div>
+          <figcaption id="self-caption">You</figcaption>
+        </figure>
+        <figure class="portrait peer-portrait" id="remote-display" hidden>
+          <div class="portrait-image">
+            <video id="remote-video" autoplay playsinline aria-label="Other participant’s camera"></video>
+          </div>
+          <figcaption id="remote-caption">Other participant</figcaption>
+        </figure>
+        <section class="board-panel" aria-label="Shared whiteboard">
+          <canvas id="board" width="1600" height="760" aria-label="Shared whiteboard. Both participants can write with a mouse or stylus."></canvas>
+          <p id="board-hint">Write on the whiteboard</p>
+          <div id="projection" class="projection" hidden>
+            <video id="projected-video" autoplay muted playsinline aria-label="Teacher’s shared screen"></video>
+            <p id="projection-status" role="status"></p>
+          </div>
+        </section>
+        <div class="molecule-viewport" id="molecule-viewport" hidden></div>
+      </div>
+
+      <footer class="room-dock">
+        <p class="board-status" id="board-status" role="status"></p>
+        <div class="room-controls">
+          <button id="start-media" type="button">Enable Mic</button>
+          <button id="mute" type="button" aria-pressed="false" hidden>Mute Mic</button>
+          <button id="stop-media" type="button" hidden>Disable Mic</button>
+          <button id="camera-toggle" type="button" aria-pressed="false">Enable Camera</button>
+          <button id="play-remote" type="button" hidden>Play Audio</button>
+          <button id="cast-toggle" type="button" aria-pressed="false" hidden>Share Screen</button>
+          <button id="projection-toggle" type="button" hidden>Show Whiteboard</button>
+          <details class="tool-menu" id="tools">
+            <summary>Whiteboard Tools</summary>
+            <div class="tool-panel">
+              <div class="pen-row">
+                <div class="pens" role="group" aria-label="Pen color">
+                  <button type="button" class="pen active" data-color="#243447" style="--pen:#243447" aria-label="Ink blue" aria-pressed="true"></button>
+                  <button type="button" class="pen" data-color="#327c85" style="--pen:#327c85" aria-label="Teal" aria-pressed="false"></button>
+                  <button type="button" class="pen" data-color="#b86d52" style="--pen:#b86d52" aria-label="Ochre" aria-pressed="false"></button>
+                </div>
+                <label class="sr-only" for="pen-width">Pen width</label>
+                <select id="pen-width"><option value="2.5">Fine</option><option value="5">Medium</option><option value="9">Broad</option></select>
+                <button id="clear" type="button">Clear Whiteboard</button>
+              </div>
+              <div class="teacher-tools" id="teacher-tools" hidden>
+                <button id="pointer-toggle" type="button" aria-pressed="false">Wizard Hand</button>
+                <label for="molecule-select">ChemBoard</label>
+                <select id="molecule-select"><option value="">Hide Molecule</option></select>
+              </div>
+            </div>
+          </details>
+        </div>
+        <p class="media-status" id="media-status" role="status"></p>
+      </footer>
+    </section>
+  </main>
+  <p class="vr-status" id="station-vr-status" role="status"></p>
+
+  <dialog id="join-dialog" aria-labelledby="entry-title">
+    <button id="close-entry" class="close-entry" type="button" aria-label="Close">×</button>
+    <h2 id="entry-title">Join Classroom</h2>
+    <form id="join-form">
+      <label class="sr-only" for="room-code">Room code</label>
+      <input id="room-code" name="code" required minlength="6" maxlength="12" pattern="[A-Za-z0-9]{6,12}" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="Room code" autofocus>
+      <button id="join" class="primary" type="submit">Join</button>
+    </form>
+    <p class="lobby-status" id="join-status" role="status"></p>
+  </dialog>
+
+  <dialog id="appointment-dialog" aria-labelledby="appointment-title">
+    <button id="close-appointment" class="close-entry" type="button" aria-label="Close appointment dialog">×</button>
+    <h2 id="appointment-title">Set Appointment</h2>
+    <form id="appointment-form">
+      <label class="appointment-field" for="appointment-topic">Lesson topic <span>Optional</span></label>
+      <input id="appointment-topic" type="text" maxlength="70" autocomplete="off" placeholder="e.g. Exploring molecular shapes">
+      <div class="appointment-datetime">
+        <label class="appointment-field" for="appointment-date">Date<input id="appointment-date" type="date" required></label>
+        <label class="appointment-field" for="appointment-time">Time<input id="appointment-time" type="time" required></label>
+      </div>
+      <p class="appointment-zone" id="appointment-zone"></p>
+      <p class="appointment-note">Your appointment is saved in this browser. Copy the invitation to share it.</p>
+      <p class="lobby-status" id="appointment-feedback" role="status"></p>
+      <button class="primary" type="submit">Save Appointment</button>
+    </form>
+  </dialog>
+
+  <dialog id="teacher-dialog" class="teacher-dialog" aria-labelledby="teacher-title">
+    <button id="close-teacher" class="close-entry" type="button" aria-label="Close teacher profile">×</button>
+    <div id="teacher-image" class="teacher-image" role="img" aria-label="Illustrated placeholder portrait"></div>
+    <div class="teacher-profile">
+      <h2 id="teacher-title">Teacher</h2>
+      <div id="teacher-biography" aria-label="Biography"></div>
+    </div>
+  </dialog>
+
+  <dialog id="share-dialog" aria-labelledby="share-title">
+    <button id="close-share" class="close-entry" type="button" aria-label="Close invitation">×</button>
+    <h2 id="share-title">Invite someone</h2>
+    <p id="share-details"></p>
+    <label class="sr-only" for="share-link">Classroom invitation link</label>
+    <input id="share-link" type="url" readonly spellcheck="false">
+    <button id="copy-share-link" class="primary" type="button">Copy Invitation</button>
+    <p id="share-feedback" role="status"></p>
+  </dialog>
+
+  <script type="module" src="./live.js?v=medieval-lounge-40"></script>
+</body>
+</html>

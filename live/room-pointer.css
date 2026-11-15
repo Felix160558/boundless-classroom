@@ -1,0 +1,22 @@
+.room-pointer {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.room-pointer img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  user-select: none;
+  opacity: .93;
+  filter: drop-shadow(0 3px 3px #3024494d) drop-shadow(0 0 5px #b2a1dc54);
+  will-change: transform;
+}
+
+@media (pointer: fine) {
+  #board.room-pointer-target { cursor: none; }
+}
