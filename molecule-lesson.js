@@ -142,6 +142,13 @@ export function createMoleculeStage(parent) {
       const object=objects[activeModel]||objects[0];if(!object)return;
       object.targetYaw+=THREE.MathUtils.clamp(dx,-.5,.5);object.targetPitch=THREE.MathUtils.clamp(object.targetPitch+THREE.MathUtils.clamp(dy,-.5,.5),-1.35,1.35);
     },
+    setOrientation(yaw, pitch){
+      const object=objects[activeModel]||objects[0];
+      if(!object||!Number.isFinite(yaw)||!Number.isFinite(pitch))return;
+      const nearest=THREE.MathUtils.euclideanModulo(yaw-object.yaw+Math.PI,Math.PI*2)-Math.PI;
+      object.targetYaw=object.yaw+nearest;
+      object.targetPitch=THREE.MathUtils.clamp(pitch,-1.35,1.35);
+    },
     hitTest(raycaster){if(!ids.length||!group.visible)return false;group.updateWorldMatrix(true,true);const hit=raycaster.intersectObjects(hitObjects,false)[0];if(hit)activeModel=hit.object.userData.modelIndex||0;return Boolean(hit);},
     dispose(){destroyModels();parent.remove(group);}
   };

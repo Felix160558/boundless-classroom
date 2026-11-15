@@ -81,51 +81,6 @@ $('#back-home').addEventListener('click',async()=>{
 window.addEventListener('hashchange',updateMode);
 updateMode();
 
-const dialog=$('#book-dialog'),dateInput=$('#book-date'),timeInput=$('#book-time');
-const notice=$('#book-notice'),defaultNotice=notice.textContent;
-const bookingKey='boundless_demo_booking';
-function localDate(date){return new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,10);}
-function setBookingDefaults(){
-  const now=new Date(),later=new Date(now.getTime()+60*60*1000);
-  dateInput.min=localDate(now);dateInput.value=localDate(later);
-  timeInput.value=String(later.getHours()).padStart(2,'0')+':'+String(later.getMinutes()).padStart(2,'0');
-  const zone=Intl.DateTimeFormat().resolvedOptions().timeZone||'本地时间';
-  $('#booking-timezone').textContent=zone;return zone;
-}
-function showSaved(){
-  notice.textContent=defaultNotice;$('#clear-booking').hidden=true;
-  try{
-    const saved=JSON.parse(localStorage.getItem(bookingKey));
-    if(saved&&typeof saved.topic==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(saved.date)&&/^\d{2}:\d{2}$/.test(saved.time)){
-      notice.textContent='上次本地示意：'+saved.date+' '+saved.time+' · '+saved.topic+'\n非正式预约，尚未通知老师。';
-      $('#clear-booking').hidden=false;
-    }
-  }catch{}
-}
-$('#open-book').addEventListener('click',()=>{setBookingDefaults();showSaved();dialog.showModal();});
-$$('[data-close]').forEach(b=>b.addEventListener('click',()=>dialog.close()));
-dialog.addEventListener('click',e=>{
-  const r=dialog.getBoundingClientRect();
-  if(e.target===dialog&&(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom))dialog.close();
-});
-$('#book-form').addEventListener('submit',e=>{
-  e.preventDefault();const text=$('#book-topic').value.trim();if(!text)return;
-  const now=new Date(),value=new Date(dateInput.value+'T'+timeInput.value);
-  dateInput.min=localDate(now);
-  if(!Number.isFinite(value.getTime())||value.getTime()<=now.getTime()){
-    notice.textContent='请选择未来的日期和时间。预约仍然只是本地演示。';return;
-  }
-  const booking={topic:text,date:dateInput.value,time:timeInput.value,teacher:'cat',timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,startsAt:value.toISOString(),demo:true};
-  try{localStorage.setItem(bookingKey,JSON.stringify(booking));}
-  catch{notice.textContent='浏览器未能保存。请检查是否允许本地存储；没有生成或发送预约。';toast('保存失败，请检查浏览器本地存储设置。');return;}
-  notice.textContent='已保存本地预约示意：'+booking.date+' '+booking.time+' · '+text+'\n尚未与任何真人约定，也不会发送通知。';
-  $('#clear-booking').hidden=false;toast('预约示意已保存在本浏览器。');
-});
-$('#clear-booking').addEventListener('click',()=>{
-  try{localStorage.removeItem(bookingKey);notice.textContent=defaultNotice;$('#clear-booking').hidden=true;toast('已清除本地预约示意。');}
-  catch{toast('未能清除，请检查浏览器存储设置。');}
-});
-
 function addMessage(who,text,mine=false,rich=false){
   const item=document.createElement('div');item.className='message'+(mine?' mine':'');
   const label=document.createElement('small');label.textContent=who;
@@ -483,9 +438,9 @@ function fallback(message){
   if(message)$('#fallback-note').textContent=message;
 }
 const sceneStartupTimer=setTimeout(()=>{
-  if(!space)fallback('三维教室资源载入较慢，可刷新重试。文字课堂和预约仍可使用。');
+  if(!space)fallback('三维教室资源载入较慢，可刷新重试。仍可使用文字课堂和真人教室。');
 },45000);
-import('./space-scene.js?v=quiet-shape-31').then(async({createSpace})=>{
+import('./space-scene.js?v=medieval-lounge-40').then(async({createSpace})=>{
   clearTimeout(sceneStartupTimer);
   space=createSpace($('#universe'),(state,detail)=>{
     if(state==='ready'){
@@ -506,9 +461,9 @@ import('./space-scene.js?v=quiet-shape-31').then(async({createSpace})=>{
     }
     if(state==='teacher-tail-ready')$('#fallback-note').hidden=true;
     if(state==='teacher-error'){
-      $('#scene-loading').hidden=true;$('#fallback-note').textContent='猫老师模型暂时未能载入，刷新可重试。文字课堂和本地预约仍可使用。';$('#fallback-note').hidden=false;
+      $('#scene-loading').hidden=true;$('#fallback-note').textContent='猫老师模型暂时未能载入，刷新可重试。仍可使用文字课堂和真人教室。';$('#fallback-note').hidden=false;
     }
-    if(state==='lost')fallback('3D 画面暂时中断。请刷新恢复，文字课堂和本地预约仍可使用。');
+    if(state==='lost')fallback('3D 画面暂时中断。请刷新恢复，仍可使用文字课堂和真人教室。');
     if(state==='restored'){document.body.classList.remove('fallback');$('#fallback-note').hidden=true;}
     if(state==='xr-start'){$('#xr-status').textContent='单人头显空间，已在课桌座位处定位。';}
     if(state==='xr-end'){$('#xr-status').textContent='课桌座位视角，拖动或方向键环视。';}
@@ -525,6 +480,6 @@ import('./space-scene.js?v=quiet-shape-31').then(async({createSpace})=>{
   teacherLearningState=null; // Replay the current semantic state after a late scene load.
   updateMode();xrSupported=await space.immersiveSupported();
   if(xrSupported){$('#immersive-btn').textContent='进入头显 ↗';$('#xr-status').textContent='课桌座位视角，设备支持实验性单人头显入口。';}
-}).catch(()=>{clearTimeout(sceneStartupTimer);fallback('三维教室暂未载入，请刷新重试。文字课堂和预约仍可使用。');});
+}).catch(()=>{clearTimeout(sceneStartupTimer);fallback('三维教室暂未载入，请刷新重试。仍可使用文字课堂和真人教室。');});
 
 // Older comparison links now enter the same open classroom, without a chapter flow.

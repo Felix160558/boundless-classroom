@@ -1,5 +1,10 @@
 # Boundless Classroom · Space Version
 
+## Medieval lounge 40 · 2026-11-15
+
+Reservation now opens a medieval-inspired common room with weathered masonry, solid oak furniture, iron fixtures and a layered animated hearth. The glass classroom remains an explicitly labelled solo preview on GitHub Pages: no cross-device room service is deployed. Appointments are saved in the browser; portraits are synthetic placeholders. Existing AI cat-teacher functions are preserved. Visual and headset acceptance belongs to the owner.
+
+
 ## Quiet input 33
 
 The composer uses one microphone with automatic Chinese/English transcription and one leftmost plus icon for images/PDF. No manual language buttons. A pause or Stop ends the recording; text remains editable before Send. Audio is transcribed through the invited gateway, not guessed from browser language. Recording is bounded to 60 seconds; actual recognition accuracy and device acceptance are owner-reviewed.
