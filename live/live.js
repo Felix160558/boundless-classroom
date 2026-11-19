@@ -5,8 +5,10 @@ import {createRoomCast} from './room-cast.js?v=station-room-38';
 import {createRoomPointer} from './room-pointer.js?v=station-room-38';
 import {mountAppointment} from './appointment.js?v=medieval-lounge-40';
 import {mountRoomInvitation, roomCodeFromURL} from './room-invitation.js?v=medieval-lounge-40';
-import {stationView} from './room-sky.js?v=star-window-41';
-import {createPreviewRoom, isPagesPreview, PREVIEW_NOTICE} from './preview-room.js?v=medieval-lounge-40';
+import {stationView} from './room-sky.js?v=ink-chemboard-42';
+import {createPreviewRoom, isPagesPreview, PREVIEW_NOTICE} from './preview-room.js?v=ink-chemboard-42';
+
+import {lookupBoardMolecule, recognizeBoardMolecule, selectCircledInk, strokesAtEraser} from './board-chemistry.js?v=ink-chemboard-42';
 
 const soloPreview = isPagesPreview(window.location.hostname);
 const previewRoom = soloPreview ? createPreviewRoom({onEvent:applyEvent}) : null;
@@ -18,6 +20,7 @@ const ctx = canvas.getContext('2d');
 const workspace = $('workspace');
 const lobbyDialog = $('join-dialog');
 const moleculePicker = $('molecule-select');
+const correction = $('ink-correction');
 const errors = {
   role_taken:'This room already has someone in that role.',
   room_not_found:'Room not found. Ask the teacher to open it and check the code.',
@@ -30,12 +33,18 @@ const errors = {
   request_timeout:'The local server took too long to respond. If you were joining, try again in a minute.',
   stale_epoch:'The board was just cleared. That stroke was discarded.',
   invalid_molecule:'This molecule is unavailable.',
+  invalid_chemistry:'Circle one formula or name at a time.',
+  missing_stroke:'Some of that ink was erased. Write and circle it again.',
+  chemistry_full:'Erase one of the three labels to make room for another model.',
+  ink_already_linked:'That ink already has a model.',
   teacher_required:'The teacher controls this tool.',
 };
 let session = null, generation = 0, joining = false, leaving = false, peer = null, other = null;
 let microphone = null, cameraStream = null, pollController = null, sequence = 0;
 const capturing = {audio:false,video:false};
-let stroke = null, flushTimer = null, pointerId = null, penColor = '#243447';
+let stroke = null, pointerId = null, penColor = '#243447';
+let eraser = false, erasePath = null, inkTarget = null, inkRevision = 0, chemistry = [];
+let inkNoteUntil = 0;
 let online = false, clearBusy = false, uploadQueue = Promise.resolve(), pendingWrites = 0;
 let frame = null;
 let hostedCode = null;
@@ -209,6 +218,7 @@ async function castChanged({stream:display}) {
 }
 
 function setPointerMode(enabled) {
+  if (enabled) setEraser(false);
   pointer.setEnabled(enabled);
   $('pointer-toggle').setAttribute('aria-pressed',String(enabled));
   $('tools').querySelector('summary').textContent = enabled ? 'End Pointing' : 'Whiteboard Tools';
@@ -259,33 +269,98 @@ function render() {
   });
 }
 new ResizeObserver(render).observe(canvas);
-function cancelStroke() { clearTimeout(flushTimer); flushTimer = null; stroke = null; pointerId = null; render(); }
+function cancelStroke() {
+  const active = pointerId;
+  stroke = null; erasePath = null; pointerId = null;
+  if (active !== null && workspace.hasPointerCapture(active)) workspace.releasePointerCapture(active);
+  render();
+}
+function updateChemistry(entries) {
+  chemistry = entries;
+  workspace.dispatchEvent(new CustomEvent('room-board-chemistry',{detail:entries}));
+}
+function cancelInkSelection() {
+  inkRevision++; inkTarget=null;
+  if (correction.open) correction.close();
+}
+function setEraser(enabled) {
+  eraser=enabled;
+  $('eraser').setAttribute('aria-pressed',String(enabled));
+  workspace.dataset.eraser=String(enabled);
+}
+function inkNote(text) { inkNoteUntil=performance.now()+3500; boardText(text); }
+const aspect = () => canvas.clientWidth / canvas.clientHeight || 2.1;
+function addInkPoint(path, next) {
+  const last = path.at(-1);
+  if (last && Math.hypot(last[0]-next[0],last[1]-next[1]) < .0005) return;
+  if (path.length >= 512) path.splice(0,path.length,...path.filter((_,i)=>i%2===0 || i===path.length-1));
+  path.push(next);
+}
 function updateBoardStatus() {
+  if (performance.now()<inkNoteUntil) return;
   if (soloPreview) { boardText('Whiteboard · this tab only'); return; }
   if (!online) boardText('Reconnecting. Writing is paused.');
   else if (pendingWrites) boardText(`Syncing ${pendingWrites}…`);
   else boardText(other ? 'Whiteboard synced' : 'Whiteboard ready');
 }
-function flushStroke(continuing = false) {
-  clearTimeout(flushTimer); flushTimer = null;
-  if (!stroke || !session) return;
-  const sent = stroke, epoch = board.epoch, token = session.token, g = generation;
-  const last = sent.points.at(-1); stroke = continuing ? {...sent,id:crypto.randomUUID(),points:[last]} : null;
-  if (pendingWrites >= 12) { cancelStroke(); boardText('The connection is busy. Try writing again in a moment.'); return; }
-  board.addPending(sent); pendingWrites++; render(); updateBoardStatus();
-  uploadQueue = uploadQueue.then(async () => {
-    if (g !== generation || epoch !== board.epoch) return;
-    try { await api('board',{epoch,stroke:sent},{token}); }
-    catch (e) {
-      if (g !== generation) return;
-      board.reject(sent.id);
-      // Poll events are the sole source of stroke snapshots. A delayed HTTP error
-      // must never roll back a newer clear or erase already-consumed strokes.
-      if (e.code === 'stale_epoch') cancelStroke();
-      boardText(message(e)); render();
+function queueBoard(operation) {
+  if (!session || !online || clearBusy) return Promise.resolve(false);
+  const {token}=session, epoch=board.epoch, g=generation;
+  if (pendingWrites>=12) { inkNote('The connection is busy. Try again in a moment.'); return Promise.resolve(false); }
+  if (operation.stroke) board.addPending(operation.stroke);
+  pendingWrites++; render(); updateBoardStatus();
+  const task=uploadQueue.then(async()=>{
+    if (g!==generation || epoch!==board.epoch) return false;
+    try { await api('board',{epoch,...operation},{token}); return g===generation && epoch===board.epoch; }
+    catch(error) {
+      if (g!==generation || epoch!==board.epoch) return false;
+      if (operation.stroke) board.reject(operation.stroke.id);
+      if (error.code==='stale_epoch') cancelStroke();
+      inkNote(message(error)); render(); return false;
     }
-  }).finally(() => { if (g === generation) { pendingWrites--; if (!pendingWrites && online) setTimeout(() => { if (g === generation) updateBoardStatus(); },1200); } });
+  }).finally(()=>{
+    if (g===generation) {
+      pendingWrites--;
+      if (!pendingWrites && online) setTimeout(()=>{if (g===generation) updateBoardStatus();},3600);
+    }
+  });
+  uploadQueue=task;
+  return task;
 }
+function addSelectedModel(target,id) {
+  if (target.g!==generation || target.epoch!==board.epoch || target.revision!==inkRevision) return;
+  if (!stationView.ready) { inkNote('This browser cannot display the 3D classroom.'); return; }
+  void queueBoard({chemistry:{key:crypto.randomUUID(),id,strokes:target.strokes}});
+}
+async function identifyInk(selected,ratio) {
+  cancelInkSelection();
+  const ids=selected.map(ink=>ink.id);
+  if (chemistry.some(item=>item.strokes.some(id=>ids.includes(id)))) { inkNote('Circle only ink that has no model yet.'); return; }
+  if (chemistry.length>=3) { inkNote(errors.chemistry_full); return; }
+  const target={g:generation,epoch:board.epoch,revision:inkRevision,strokes:ids};
+  let result;
+  try { result=await recognizeBoardMolecule(selected,ratio); } catch { result={text:'',ids:[]}; }
+  if (!session || target.g!==generation || target.epoch!==board.epoch || target.revision!==inkRevision) return;
+  if (result.ids.length===1) { addSelectedModel(target,result.ids[0]); return; }
+  inkTarget=target;
+  $('ink-name').value=result.text;
+  $('ink-correction-status').textContent='';
+  correction.showModal();
+  $('ink-name').select();
+}
+$('ink-cancel').addEventListener('click',cancelInkSelection);
+correction.addEventListener('close',()=>{ if (!correction.open) inkTarget=null; });
+$('ink-correction-form').addEventListener('submit',event=>{
+  event.preventDefault();
+  if (!inkTarget) return;
+  const {ids}=lookupBoardMolecule($('ink-name').value);
+  if (ids.length!==1) {
+    $('ink-correction-status').textContent=ids.length ? 'Try a more specific chemical name.' : 'No ChemBoard model matches that name or formula.';
+    return;
+  }
+  const target=inkTarget; correction.close(); inkTarget=null;
+  addSelectedModel(target,ids[0]);
+});
 function point(event, clamp=false) {
   if (stationView.ready) return stationView.boardPoint(event,clamp);
   const rect=canvas.getBoundingClientRect();
@@ -296,10 +371,11 @@ function point(event, clamp=false) {
 }
 workspace.addEventListener('pointerdown', e => {
   if (!session || e.altKey || (e.pointerType==='mouse' && e.button!==0)) return;
-  if (stationView.ready && currentMolecule && online && session.role==='teacher' && stationView.hitModel(e)) {
+  const chemKey=stationView.ready && !eraser && !pointer.isEnabled() ? stationView.boardChemHit(e) : null;
+  if (chemKey || (stationView.ready && !eraser && currentMolecule && online && session.role==='teacher' && stationView.hitModel(e))) {
     if (pointerId!==null || modelDrag) return;
     e.preventDefault();
-    modelDrag={id:e.pointerId,x:e.clientX,y:e.clientY};
+    modelDrag={id:e.pointerId,x:e.clientX,y:e.clientY,chemKey};
     workspace.setPointerCapture(e.pointerId);
     return;
   }
@@ -309,10 +385,15 @@ workspace.addEventListener('pointerdown', e => {
   e.preventDefault();
   if (!online || clearBusy || pointer.isEnabled() || pointerId!==null || modelDrag || !$('projection').hidden) return;
   pointerId=e.pointerId; workspace.setPointerCapture(pointerId);
-  stroke={id:crypto.randomUUID(),color:penColor,width:Number($('pen-width').value),points:[start]};
+  if (eraser) erasePath=[start];
+  else stroke={id:crypto.randomUUID(),color:penColor,width:Number($('pen-width').value),points:[start]};
   render();
 });
 workspace.addEventListener('pointermove', e => {
+  if (modelDrag?.id===e.pointerId && modelDrag.chemKey) {
+    stationView.boardChemRotate(modelDrag.chemKey,(e.clientX-modelDrag.x)*.018,(e.clientY-modelDrag.y)*.018);
+    modelDrag.x=e.clientX; modelDrag.y=e.clientY; return;
+  }
   if (modelDrag?.id===e.pointerId && currentMolecule && online) {
     const yaw=currentMolecule.yaw+(e.clientX-modelDrag.x)*.018;
     const pitch=currentMolecule.pitch+(e.clientY-modelDrag.y)*.018;
@@ -327,29 +408,46 @@ workspace.addEventListener('pointermove', e => {
   if (stationView.ready && e.pointerType==='mouse') {
     workspace.dataset.cursor = point(e) ? pointer.isEnabled()?'hand':$('projection').hidden?'board':'screen' : 'look';
   }
-  if (e.pointerId !== pointerId || !stroke || !online) return;
+  if (e.pointerId!==pointerId || !online) return;
   const position=point(e,true);
   if (!position) return;
-  stroke.points.push(position); render();
-  if (stroke.points.length >= 40) flushStroke(true);
-  else if (!flushTimer) flushTimer=setTimeout(() => { if (stroke && stroke.points.length > 1) flushStroke(true); },120);
+  if (erasePath) addInkPoint(erasePath,position);
+  else if (stroke) { addInkPoint(stroke.points,position); render(); }
 });
 function finishStroke(e) {
   if (modelDrag?.id===e.pointerId) modelDrag=null;
-  if(e.pointerId!==pointerId) return;
-  flushStroke(false); pointerId=null; render();
+  if (e.pointerId!==pointerId) return;
+  if (e.type!=='pointerup') { cancelStroke(); return; }
+  const completed=stroke, trail=erasePath, ratio=aspect();
+  const last=point(e,true);
+  if (last && (trail || completed)) addInkPoint(trail || completed.points,last);
+  cancelStroke();
+  if (trail) {
+    const erased=strokesAtEraser(trail,board.values(),ratio);
+    for (let i=0;i<erased.length;i+=128) void queueBoard({erase:erased.slice(i,i+128)});
+  } else if (completed) {
+    const selected=selectCircledInk(completed.points,board.values(),ratio);
+    if (selected?.length) void identifyInk(selected,ratio);
+    else void queueBoard({stroke:completed});
+  }
 }
 workspace.addEventListener('pointerup', finishStroke);
 workspace.addEventListener('pointercancel', finishStroke);
 workspace.addEventListener('lostpointercapture', finishStroke);
+$('eraser').addEventListener('click',()=>{
+  cancelStroke();
+  if (!eraser && pointer.isEnabled()) setPointerMode(false);
+  setEraser(!eraser);
+  if (eraser) $('tools').open=false;
+});
 document.querySelectorAll('[data-color]').forEach(button => button.addEventListener('click', () => {
-  penColor=button.dataset.color; document.querySelectorAll('[data-color]').forEach(b => { const selected=b===button; b.classList.toggle('active',selected); b.setAttribute('aria-pressed',String(selected)); });
+  setEraser(false); penColor=button.dataset.color; document.querySelectorAll('[data-color]').forEach(b => { const selected=b===button; b.classList.toggle('active',selected); b.setAttribute('aria-pressed',String(selected)); });
 }));
 $('clear').addEventListener('click', async () => {
   if (!session || !online || clearBusy || !window.confirm(soloPreview ? 'Clear this preview whiteboard? This cannot be undone.' : 'Clear the whiteboard for both participants? This cannot be undone.')) return;
   clearBusy=true; $('clear').disabled=true; cancelStroke(); const g=generation;
   try { await uploadQueue; if (g!==generation) return; const cleared=await api('board',{epoch:board.epoch,clear:true});
-    if (g===generation) { board.clear(cleared.epoch); render(); } }
+    if (g===generation && board.clear(cleared.epoch)) { cancelInkSelection(); updateChemistry([]); render(); } }
   catch(e) { if(g===generation) boardText(message(e)); }
   finally { if(g===generation) { clearBusy=false; $('clear').disabled=false; } }
 });
@@ -544,7 +642,16 @@ function applyEvent(event) {
   }
   else if(event.type==='signal') { if(event.peerId===other?.peerId) peer?.receive(event); }
   else if(event.type==='board-stroke') { board.accept(event.epoch,event.stroke); render(); }
-  else if(event.type==='board-clear') { if(board.clear(event.epoch)) { cancelStroke(); render(); } }
+  else if(event.type==='board-erase' && event.epoch===board.epoch) {
+    const erased=new Set(event.erase);
+    for (const id of erased) { board.strokes.delete(id); board.reject(id); }
+    if (inkTarget?.strokes.some(id=>erased.has(id))) cancelInkSelection();
+    updateChemistry(chemistry.filter(item=>!item.strokes.some(id=>erased.has(id)))); render();
+  }
+  else if(event.type==='board-chemistry' && event.epoch===board.epoch && !chemistry.some(item=>item.key===event.chemistry.key)) {
+    updateChemistry([...chemistry,event.chemistry]);
+  }
+  else if(event.type==='board-clear') { if(board.clear(event.epoch)) { cancelStroke(); cancelInkSelection(); updateChemistry([]); render(); } }
   else if(event.type==='molecule-state' && session.role==='student') showMolecule(event.molecule);
   else if(event.type==='pointer-state' && session.role==='student') pointer.show(event.pointer);
   else if(event.type==='presentation-state' && session.role==='student') {
@@ -553,7 +660,7 @@ function applyEvent(event) {
     showRemoteVideo();
   }
   else if(event.type==='resync') {
-    board.adoptSnapshot(event.epoch,event.board); cancelStroke(); render();
+    if (board.adoptSnapshot(event.epoch,event.board)) { cancelStroke(); cancelInkSelection(); updateChemistry(event.chemistry || []); render(); }
     if (session.role==='student') {
       showMolecule(event.molecule);
       pointer.show(event.pointer);
@@ -608,7 +715,7 @@ async function leave(note='',unloading=false) {
   for (const source of [microphone,cameraStream]) source?.getTracks().forEach(track=>track.stop());
   microphone=null; cameraStream=null; capturing.audio=false; capturing.video=false;
   pendingWrites=0; uploadQueue=Promise.resolve(); clearBusy=false;
-  board.reset(0,[]); $('room').hidden=true; $('lobby').hidden=false;
+  board.reset(0,[]); cancelInkSelection(); updateChemistry([]); setEraser(false); inkNoteUntil=0; $('room').hidden=true; $('lobby').hidden=false;
   document.body.dataset.station='lounge';
   document.title='The Common Room · Boundless Classroom';
   $('room-header').hidden=true; $('preview-label').hidden=false; $('tools').open=false;
@@ -662,7 +769,7 @@ async function joinRoom(role, code) {
   try {
     const joined=await api('join',{code,role});
     if(g!==generation) { api('leave',{}, {token:joined.token}).catch(()=>{}); return; }
-    session={...joined,role,code}; sequence=joined.sequence; online=true; board.reset(joined.epoch,joined.board);
+    session={...joined,role,code}; sequence=joined.sequence; online=true; board.reset(joined.epoch,joined.board); updateChemistry(joined.chemistry || []);
     if (role==='teacher') hostedCode=code;
     $('room-code').value=code;
     lobbyDialog.close();

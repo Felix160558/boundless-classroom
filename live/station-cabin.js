@@ -389,5 +389,6 @@ export function createStationCabin(scene, {board, localVideo, remoteVideo, proje
     if (activeModel) models.update(time/1000,elapsed);
   }
 
-  return {group,layout,setModel,update,boardPoint,hitModel,setPointer};
+  return {group,layout,setModel,update,boardPoint,hitModel,setPointer,
+    boardSurface:()=>surface && {...surface,z:-BOARD_DEPTH}};
 }

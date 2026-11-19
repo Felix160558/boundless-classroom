@@ -383,3 +383,21 @@ body[data-station-rendered="true"] .workspace.is-looking { cursor: grabbing; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+
+#ink-correction { width: min(390px, calc(100vw - 36px)); }
+#ink-correction form { display: grid; gap: 12px; }
+#ink-correction label, #ink-correction-status { color: var(--muted); font-size: .86rem; }
+#ink-correction-status:empty { display: none; }
+.ink-actions { display:flex; justify-content:flex-end; gap:8px; }
+#eraser[aria-pressed="true"] { border-color: var(--champagne, #d5c2a1); color: var(--champagne, #d5c2a1); }
+
+#ink-correction h2 { margin: 0; }
+#ink-name {
+  width: 100%; min-height: 44px; padding: 9px 12px;
+  background: #080b135f; color: var(--ink); border: 1px solid var(--line);
+  border-radius: 7px; font-size: 16px;
+}
+.ink-actions button { padding: 8px 12px; }
+.workspace[data-eraser="true"] #board,
+body[data-station-rendered="true"] .workspace[data-eraser="true"][data-cursor="board"] { cursor: cell; }

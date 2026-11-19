@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="referrer" content="no-referrer">
   <title>The Common Room · Boundless Classroom</title>
-  <link rel="stylesheet" href="./live.css?v=medieval-lounge-40">
+  <link rel="stylesheet" href="./live.css?v=ink-chemboard-42">
   <link rel="stylesheet" href="./room-pointer.css?v=medieval-lounge-40">
 </head>
 <body data-station="lounge">
@@ -69,7 +69,7 @@
         </figure>
         <section class="board-panel" aria-label="Shared whiteboard">
           <canvas id="board" width="1600" height="760" aria-label="Shared whiteboard. Both participants can write with a mouse or stylus."></canvas>
-          <p id="board-hint">Write on the whiteboard</p>
+          <p id="board-hint">Write a formula or name, then circle it.</p>
           <div id="projection" class="projection" hidden>
             <video id="projected-video" autoplay muted playsinline aria-label="Teacher’s shared screen"></video>
             <p id="projection-status" role="status"></p>
@@ -99,6 +99,7 @@
                 </div>
                 <label class="sr-only" for="pen-width">Pen width</label>
                 <select id="pen-width"><option value="2.5">Fine</option><option value="5">Medium</option><option value="9">Broad</option></select>
+                <button id="eraser" type="button" aria-pressed="false">Eraser</button>
                 <button id="clear" type="button">Clear Whiteboard</button>
               </div>
               <div class="teacher-tools" id="teacher-tools" hidden>
@@ -115,6 +116,15 @@
   </main>
   <p class="vr-status" id="station-vr-status" role="status"></p>
 
+  <dialog id="ink-correction" aria-labelledby="ink-correction-title">
+    <form id="ink-correction-form">
+      <h2 id="ink-correction-title">Identify molecule</h2>
+      <label for="ink-name">Enter a formula or name for the circled ink.</label>
+      <input id="ink-name" type="text" maxlength="80" placeholder="H₂O or water" autocomplete="off" required>
+      <p id="ink-correction-status" role="status"></p>
+      <div class="ink-actions"><button id="ink-cancel" type="button">Cancel</button><button class="primary" type="submit">Show Model</button></div>
+    </form>
+  </dialog>
   <dialog id="join-dialog" aria-labelledby="entry-title">
     <button id="close-entry" class="close-entry" type="button" aria-label="Close">×</button>
     <h2 id="entry-title">Join Classroom</h2>
@@ -162,6 +172,6 @@
     <p id="share-feedback" role="status"></p>
   </dialog>
 
-  <script type="module" src="./live.js?v=star-window-41"></script>
+  <script type="module" src="./live.js?v=ink-chemboard-42"></script>
 </body>
 </html>

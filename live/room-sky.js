@@ -1,13 +1,17 @@
 import * as THREE from '../three.module.min.js';
 import {createSpaceSky} from '../space-sky.js?v=medieval-lounge-40';
-import {createStationCabin} from './station-cabin.js?v=medieval-lounge-40';
+import {createStationCabin} from './station-cabin.js?v=ink-chemboard-42';
 import {createCastleLounge} from './castle-lounge.js?v=star-window-41';
+
+import {createPreviewMolecules} from './preview-molecules.js?v=ink-chemboard-42';
 
 export const stationView = {
   ready:false,
   boardPoint:()=>null,
   hitModel:()=>false,
   setPointer:()=>{},
+  boardChemHit:()=>null,
+  boardChemRotate:()=>{},
 };
 
 const get = id => document.getElementById(id);
@@ -62,6 +66,7 @@ function startStation() {
     board,workspace,localVideo:get('local-video'),remoteVideo:get('remote-video'),
     projectedVideo:get('projected-video'),projection:get('projection'),
   });
+  const chemistry=createPreviewMolecules(cabin.group,{rig});
   const lounge=createCastleLounge(scene);
   const reduce=matchMedia('(prefers-reduced-motion: reduce)');
   const raycaster=new THREE.Raycaster();
@@ -138,6 +143,7 @@ function startStation() {
     cabin.group.visible=classroom;
     sky.resize(height,renderer.getPixelRatio());
     cabin.layout(camera,width,height,classroom?board.getBoundingClientRect():null,classroom);
+    chemistry.layout(cabin.boardSurface());
     lounge.layout(camera,width,height);
     positionPortraitButtons();
     needsFrame=true;
@@ -167,7 +173,7 @@ function startStation() {
     yaw=0;pitch=0;drag=null;
     for (const surface of [container,workspace,lobby]) surface.classList.remove('is-looking');
     pose();
-    status.textContent=value&&!xrSession?'Drag to look around. Press Esc to return.':'';
+    status.textContent=value&&!xrSession?(inClassroom()?'Drag the room to look around, or drag a molecule to turn it. Esc to return.':'Drag to look around. Press Esc to return.'):'';
   }
 
   function exitPreview() {
@@ -206,17 +212,18 @@ function startStation() {
     opening=true;vrButton.disabled=true;
     try {
       const requestedRoom=document.body.dataset.station;
-      const session=await navigator.xr.requestSession('immersive-vr');
+      const session=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['hand-tracking']});
       if (requestedRoom!==document.body.dataset.station) {await session.end();return;}
       xrSession=session;
       session.addEventListener('end',()=>{
         if (xrSession!==session) return;
-        xrSession=null;exitPreview();scheduleLayout();
+        xrSession=null;chemistry.attachXR(null);exitPreview();scheduleLayout();
       },{once:true});
       setPreview(true);
       try {
         await renderer.xr.setSession(session);
         xrAlign=true;
+        if (inClassroom()) chemistry.attachXR(session);
       } catch(error) {
         await session.end().catch(()=>{});
         throw error;
@@ -238,13 +245,16 @@ function startStation() {
       if (!surface.contains(event.target)||event.defaultPrevented||xrSession||drag||event.button!==0||preview!==immersiveOnly) return;
       if (event.target.closest('button,a,input,select,summary,dialog')) return;
       if ((surface===workspace&&!inClassroom())||(surface===lobby&&inClassroom())) return;
-      drag={id:event.pointerId,x:event.clientX,y:event.clientY};
+      const model=immersiveOnly&&inClassroom()?chemistry.hitTest(rayAt(event)):null;
+      drag={id:event.pointerId,x:event.clientX,y:event.clientY,model};
       surface.setPointerCapture(event.pointerId);
       surface.classList.add('is-looking');
     });
     surface.addEventListener('pointermove',event=>{
       if (drag?.id!==event.pointerId) return;
-      look((event.clientX-drag.x)*.0043,(event.clientY-drag.y)*.0043);
+      if (drag.model) chemistry.rotate(drag.model,(event.clientX-drag.x)*.018,(event.clientY-drag.y)*.018);
+      else look((event.clientX-drag.x)*.0043,(event.clientY-drag.y)*.0043);
+      needsFrame=true;
       drag.x=event.clientX;drag.y=event.clientY;
     });
     for (const type of ['pointerup','pointercancel','lostpointercapture']) {
@@ -275,6 +285,9 @@ function startStation() {
   workspace.addEventListener('room-molecule-change',event=>{
     cabin.setModel(event.detail);needsFrame=true;
   });
+  workspace.addEventListener('room-board-chemistry',event=>{
+    chemistry.setModels(event.detail);needsFrame=true;
+  });
   new MutationObserver(()=>{
     if (xrSession) void xrSession.end().catch(()=>{});
     if (preview) exitPreview();
@@ -285,6 +298,8 @@ function startStation() {
   layout();pose();
   stationView.boardPoint=(event,clamp=false)=>cabin.boardPoint(rayAt(event).ray,clamp);
   stationView.hitModel=event=>cabin.hitModel(rayAt(event));
+  stationView.boardChemHit=event=>chemistry.hitTest(rayAt(event));
+  stationView.boardChemRotate=(key,dx,dy)=>{chemistry.rotate(key,dx,dy);needsFrame=true;};
   stationView.setPointer=state=>{cabin.setPointer(state);needsFrame=true;};
   stationView.ready=true;
   document.body.dataset.stationRendered='true';
@@ -312,6 +327,8 @@ function startStation() {
     sky.update(reduce.matches?0:elapsed);
     if (inClassroom()) {
       cabin.update(time,elapsed,preview);
+      if (immersive&&xrFrame&&!xrAlign) chemistry.updateXR(xrFrame,renderer.xr.getReferenceSpace());
+      chemistry.update(time/1000,elapsed);
     } else lounge.update(time,elapsed,reduce.matches);
     renderer.render(scene,camera);
   });
