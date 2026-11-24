@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
+  <title>Orange Cat · Boundless Classroom</title>
+  <link rel="stylesheet" href="./student-avatar.css?v=student-avatar-49">
+</head>
+<body>
+  <header>
+    <a href="./" class="back">← <span>Reservation</span></a>
+    <span class="brand">Boundless Classroom</span>
+  </header>
+  <main>
+    <div id="avatar-view" aria-label="Interactive 3D avatar" tabindex="0"></div>
+    <div class="heading">
+      <p>Student avatar</p>
+      <h1>Orange Cat</h1>
+    </div>
+    <p id="avatar-status" role="status">Loading avatar…</p>
+    <div class="controls">
+      <p>Drag to orbit <span>·</span> Scroll to zoom</p>
+      <div class="controls-actions">
+        <a id="avatar-pose" href="?v=student-avatar-49&amp;pose=seated">Seated view</a>
+        <button id="motion-toggle" type="button" disabled>Pause motion</button>
+      </div>
+    </div>
+  </main>
+  <script type="module" src="./student-avatar-preview.js?v=student-avatar-49"></script>
+</body>
+</html>
