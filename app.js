@@ -440,7 +440,7 @@ function fallback(message){
 const sceneStartupTimer=setTimeout(()=>{
   if(!space)fallback('三维教室资源载入较慢，可刷新重试。仍可使用文字课堂和真人教室。');
 },45000);
-import('./space-scene.js?v=medieval-lounge-40').then(async({createSpace})=>{
+import('./space-scene.js?v=teacher-face-53').then(async({createSpace})=>{
   clearTimeout(sceneStartupTimer);
   space=createSpace($('#universe'),(state,detail)=>{
     if(state==='ready'){
@@ -451,7 +451,8 @@ import('./space-scene.js?v=medieval-lounge-40').then(async({createSpace})=>{
     }
     if(state==='teacher-progress')$('#scene-loading').lastChild.textContent=' 正在载入你的猫老师 · '+detail+'%';
     if(state==='teacher-ready')$('#scene-loading').hidden=true;
-    if(state==='teacher-detail-error')toast('细毛细节暂未载入，可刷新重试；猫老师和文字课堂仍可使用。');
+    if(state==='teacher-gaussian-ready')$('#universe').dataset.teacherAppearance='gaussian';
+    if(state==='teacher-gaussian-error')toast('猫老师的动态高斯暂未载入，可刷新重试。');
     if(state==='teacher-tail-motion'){
       // Read-only DOM diagnostics for a reported motion failure; no extra UI.
       $('#universe').dataset.tailMotion=detail.mode;$('#universe').dataset.tailPose=detail.pose.join(',');

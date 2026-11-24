@@ -1,5 +1,5 @@
 import * as THREE from './three.module.min.js';
-import {createCatTeacher} from './cat-teacher.js?v=teacher-presence-26';
+import {createCatTeacher} from './cat-teacher.js?v=teacher-face-53';
 import {createMoleculeStage} from './molecule-lesson.js?v=quiet-shape-31';
 import {createSpaceSky} from './space-sky.js?v=medieval-lounge-40';
 

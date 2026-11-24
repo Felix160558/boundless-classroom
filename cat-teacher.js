@@ -1,5 +1,8 @@
 import * as THREE from './three.module.min.js';
-import {prepareHeadMesh,bindHead,createTeacherPresence} from './cat-presence.js?v=teacher-presence-26';
+import {prepareHeadMesh,bindHead,createTeacherPresence} from './cat-presence.js?v=teacher-face-53';
+import {createTeacherArm} from './cat-teacher-arm.js?v=teacher-gaussian-51';
+import {attachTeacherAccessories} from './cat-teacher-accessories.js?v=teacher-face-53';
+import {repairTeacherSleeve} from './cat-teacher-sleeve.js?v=teacher-detail-52';
 
 const VERSION='refined-cat-22';
 const TOPOLOGY_VERSION='fluid-cat-6';
@@ -232,6 +235,37 @@ export function createTailMotion(meshes,tailRig,onMotion=()=>{}){
   };
 }
 
+function createTeacherBreathing(mesh){
+  const position=mesh.geometry.getAttribute('position');
+  position.setUsage(THREE.DynamicDrawUsage);
+  const anchors=[];
+  for(let index=0;index<position.count;index++){
+    const x=position.getX(index),y=position.getY(index),z=position.getZ(index);
+    if(y<=.154||y>=.280||Math.abs(x)>=.081||z>=.062)continue;
+    if(mesh.userData.tailVertexSet?.has(index)||mesh.userData.teacherArmVertexSet?.has(index))continue;
+    const torso=ease((y-.154)/.042)*ease((.280-y)/.045)*ease((.081-Math.abs(x))/.035);
+    const depth=ease((.062-z)/.035);
+    const weight=torso*depth;
+    if(weight>.001)anchors.push({index,x,z,dx:.0012*weight*x/.081,dz:.0018*weight*THREE.MathUtils.clamp(z/.070,-1,1)});
+  }
+  mesh.userData.teacherBreathVertexSet=new Set(anchors.map(anchor=>anchor.index));
+  if(!anchors.length)return ()=>{};
+  const first=anchors[0].index,last=anchors.at(-1).index;
+  const amplitude={value:0,velocity:0};
+  return (time,dt,{reducedMotion,xr})=>{
+    const wave=.5-.5*Math.cos(Math.PI*2*(.226*time+.018*Math.sin(.48*time)));
+    const previous=amplitude.value;
+    approach(amplitude,reducedMotion?0:wave*(xr?.65:1),dt,.42);
+    if(Math.abs(previous-amplitude.value)<.00002)return;
+    for(const {index,x,z,dx,dz} of anchors){
+      position.setX(index,x+dx*amplitude.value);
+      position.setZ(index,z+dz*amplitude.value);
+    }
+    position.addUpdateRange(first*3,(last-first+1)*3);
+    position.needsUpdate=true;
+  };
+}
+
 // Curved eyelids gradually cover the original, stationary eyes. Glasses and
 // eyeballs are never scaled or replaced. The small lids reuse the original fur map.
 function createEyelid(rig,material,parent){
@@ -323,7 +357,8 @@ export function createCatTeacher(onState=()=>{}) {
   const smile={value:0,velocity:0},left={value:0,velocity:0},right={value:0,velocity:0};
   let model=null,body=null,head=null,bodyMeshes=[],faceMeshes=[],pending=null;
   let clock=0,lastTap=-10,inClassroom=false;
-  let updateTail=()=>{},updateFur=()=>{},speechMouth=null,speechEvent=null,headRig=null;
+  let updateTail=()=>{},updateBreath=()=>{},updateAppearance=()=>{};
+  let arm=null,speechMouth=null,speechEvent=null,headRig=null;
   const presence=createTeacherPresence();
   const meshList=node=>{const list=[];node.traverse(object=>{if(object.isMesh)list.push(object);});return list;};
   function react(kind='tap',direction=0){
@@ -369,11 +404,13 @@ export function createCatTeacher(onState=()=>{}) {
       if(!morphs.length||head.userData.eyeRig?.length!==2)throw new Error('The continuous face rig is missing.');
       for(const original of materials.keys())original.dispose();
       bodyMeshes=meshList(body);faceMeshes=meshList(head);
+      repairTeacherSleeve(bodyMeshes[0]);
       speechMouth=createSpeechMouth(faceMeshes[0]);
       headRig=bindHead(faceMeshes[0]);
       if(speechEvent){speechMouth.setSpeech(speechEvent);if(speechEvent.paused)speechMouth.setSpeech({type:'pause'});}
       const faceMaterial=Array.isArray(faceMeshes[0].material)?faceMeshes[0].material[0]:faceMeshes[0].material;
       for(const rig of head.userData.eyeRig)eyelids.push(createEyelid(rig,faceMaterial,headRig.attachments));
+      attachTeacherAccessories({face:faceMeshes[0],body:bodyMeshes[0],headAttachments:headRig.attachments});
       model=teacher;group.add(model);onState('teacher-ready');
       // Optional idle motion must never hold the whole classroom or model hostage.
       const tailTimer=setTimeout(()=>onState('teacher-tail-error'),30000);
@@ -381,11 +418,25 @@ export function createCatTeacher(onState=()=>{}) {
         clearTimeout(tailTimer);
         updateTail=createTailMotion(bodyMeshes,tailRig,detail=>onState('teacher-tail-motion',detail));onState('teacher-tail-ready');
       }).catch(()=>{clearTimeout(tailTimer);onState('teacher-tail-error');});
-      // Fine strands are an optional detail layer; the classroom/model render first.
-      Promise.all([tailReady,import('./cat-fur.js?v=teacher-presence-26')]).then(async([,{attachFineFur}])=>{
-        updateFur=await attachFineFur(bodyMeshes[0],faceMeshes[0]);
-        onState('teacher-detail-ready');
-      }).catch(error=>{console.warn('Teacher fine fur is unavailable.',error);onState('teacher-detail-error');});
+      // The arm and chest write to the same stable buffer as the existing tail.
+      // Bind splats only after the surface rig is installed.
+      const rigReady=tailReady.then(()=>{
+        arm=createTeacherArm(bodyMeshes[0]);
+        updateBreath=createTeacherBreathing(bodyMeshes[0]);
+        if(speechEvent&&!speechEvent.paused&&performance.now()-speechEvent.startedAt<260)arm.setSpeech(speechEvent);
+      });
+      Promise.all([rigReady,import('./teacher-gaussians.js?v=teacher-face-53')]).then(async([,{attachTeacherGaussians}])=>{
+        const appearance=await attachTeacherGaussians({body:bodyMeshes[0],face:faceMeshes[0]});
+        updateAppearance=appearance.update;
+        onState('teacher-gaussian-ready');
+      }).catch(async error=>{
+        console.warn('The animated teacher Gaussian layer is unavailable.',error);
+        onState('teacher-gaussian-error');
+        try{
+          const {attachFineFur}=await import('./cat-fur.js?v=teacher-face-53');
+          updateAppearance=await attachFineFur(bodyMeshes[0],faceMeshes[0]);
+        }catch(furError){console.warn('Teacher fine fur is unavailable.',furError);}
+      });
       void storeModel(download.cache,url,download.stored);
       const first=pending||(inClassroom?{kind:'welcome',direction:0}:null);pending=null;
       if(first)react(first.kind,first.direction);
@@ -403,23 +454,26 @@ export function createCatTeacher(onState=()=>{}) {
   }
   function setSpeech(event){
     presence.setSpeech(event);
-    if(event.type==='start')speechEvent={type:'start',text:event.text,paused:false};
+    if(event.type==='start')speechEvent={type:'start',text:event.text,paused:false,startedAt:performance.now()};
     else if(event.type==='stop')speechEvent=null;
     else if(event.type==='pause'&&speechEvent)speechEvent.paused=true;
     else if(event.type==='resume'){speechEvent=speechEvent||{type:'start'};speechEvent.paused=false;}
     speechMouth?.setSpeech(event);
+    arm?.setSpeech(event);
   }
   function update(dt,{reducedMotion=false,xr=false,time=null}={}){
     if(!model)return;clock+=dt;
-    updateTail(Number.isFinite(time)?time:clock,reducedMotion);
+    const seconds=Number.isFinite(time)?time:clock;
+    updateTail(seconds,reducedMotion);
+    updateBreath(clock,dt,{reducedMotion,xr});
+    arm?.update(dt,{reducedMotion,xr});
     const pose=presence.update(dt,{reducedMotion,xr});
     approach(smile,pose.smile,dt,.12);approach(left,pose.lid,dt,.035);approach(right,pose.lid,dt,.035);
     for(const {mesh,index} of morphs)mesh.morphTargetInfluences[index]=smile.value;
-    headRig.update(pose.pitch,pose.tilt);
+    headRig.update(pose.pitch,pose.tilt,pose.yaw);
     speechMouth?.update(dt,reducedMotion);
-    updateFur();
+    updateAppearance();
     eyelids[0](left.value);eyelids[1](right.value);
-    // Feet, body and collar stay still. Only the locally bound head responds.
   }
   function hitTest(raycaster,precise=false){
     if(!model)return false;

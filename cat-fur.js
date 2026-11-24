@@ -56,7 +56,9 @@ function makeGroom(mesh,data,count,offset,head){
   geometry.setAttribute('position',new THREE.Float32BufferAttribute(strip,3));geometry.setIndex(indices);
   const roots=new Float32Array(count*3),normals=new Float32Array(count*3),flows=new Float32Array(count*3),colors=new Float32Array(count*3),dimensions=new Float32Array(count*2),seeds=new Float32Array(count);
   const headWeights=new Float32Array(count);
-  const anchors=[],tail=mesh.userData.tailVertexSet;
+  const anchors=[],moving=[mesh.userData.tailVertexSet,mesh.userData.teacherArmVertexSet,mesh.userData.teacherBreathVertexSet].filter(Boolean);
+  const sleeve=mesh.geometry.getAttribute('teacherSleeveRepair');
+  const facePaint=head&&mesh.geometry.getAttribute('teacherFrameRepair')?.array;
   const a=new THREE.Vector3(),b=new THREE.Vector3(),c=new THREE.Vector3(),na=new THREE.Vector3(),nb=new THREE.Vector3(),nc=new THREE.Vector3();
   const point=new THREE.Vector3(),normal=new THREE.Vector3(),flow=new THREE.Vector3(),edge=new THREE.Vector3(),face=new THREE.Vector3();
   const rotation=new THREE.Quaternion();
@@ -101,6 +103,10 @@ function makeGroom(mesh,data,count,offset,head){
       headWeights[i]=weights.getY(anchor.i)*anchor.u+weights.getY(anchor.j)*anchor.v+weights.getY(anchor.k)*(1-anchor.u-anchor.v);
     }
     dimensions[i*2]=view.getFloat32(p+20,true)*1.65;dimensions[i*2+1]=view.getFloat32(p+24,true)*1.5;
+    if(sleeve){
+      const weight=sleeve.getX(anchor.i)*anchor.u+sleeve.getX(anchor.j)*anchor.v+sleeve.getX(anchor.k)*(1-anchor.u-anchor.v);
+      dimensions[i*2]*=1-weight;dimensions[i*2+1]*=1-weight;
+    }
     // Omit only strands whose old triangle now crosses the real lip seam.
     const seam=mesh.userData.mouthSeam;
     if(seam&&Math.abs(point.x-seam.center)<seam.width&&point.z>.100){
@@ -109,9 +115,15 @@ function makeGroom(mesh,data,count,offset,head){
       if(Math.min(...signs)<0&&Math.max(...signs)>=0){dimensions[i*2]=0;dimensions[i*2+1]=0;}
     }
     for(let k=0;k<3;k++)colors[i*3+k]=linear(view.getUint8(p+28+k)/255);
+    if(facePaint){
+      const {i:a,j:b,k:c,u,v}=anchor,w=1-u-v;
+      const sample=channel=>facePaint[a*4+channel]*u+facePaint[b*4+channel]*v+facePaint[c*4+channel]*w;
+      const remain=1-sample(3);
+      for(let channel=0;channel<3;channel++)colors[i*3+channel]=colors[i*3+channel]*remain+sample(channel);
+    }
     seeds[i]=view.getUint8(p+31)/255;
     const movingFace=(mesh.geometry.morphAttributes.position||[]).some(morph=>[anchor.i,anchor.j,anchor.k].some(index=>Math.abs(morph.getX(index))+Math.abs(morph.getY(index))+Math.abs(morph.getZ(index))>1e-9));
-    if(movingFace||tail&&[anchor.i,anchor.j,anchor.k].some(index=>tail.has(index)))anchors.push(anchor);
+    if(movingFace||[anchor.i,anchor.j,anchor.k].some(index=>moving.some(region=>region.has(index))))anchors.push(anchor);
   }
   for(const [name,array,size] of [['root',roots,3],['strandNormal',normals,3],['flow',flows,3],['strandColor',colors,3],['dimensions',dimensions,2],['variation',seeds,1],['headWeight',headWeights,1]]){
     const attribute=new THREE.InstancedBufferAttribute(array,size);
