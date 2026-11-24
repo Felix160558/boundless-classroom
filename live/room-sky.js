@@ -1,9 +1,11 @@
 import * as THREE from '../three.module.min.js';
 import {createSpaceSky} from '../space-sky.js?v=medieval-lounge-40';
-import {createStationCabin} from './station-cabin.js?v=ink-chemboard-42';
+import {BOARD_DEPTH, createStationCabin} from './station-cabin.js?v=trio-classroom-50';
 import {createCastleLounge} from './castle-lounge.js?v=star-window-41';
 
-import {createPreviewMolecules} from './preview-molecules.js?v=ink-chemboard-42';
+import {createPreviewMolecules} from './preview-molecules.js?v=shared-classroom-43';
+import {createSharedSeating, seatPose, seatedView, SHARED_BOARD} from './shared-seating.js?v=trio-classroom-50';
+import {createXRAvatarMenu} from './xr-avatar-menu.js?v=student-avatar-45';
 
 export const stationView = {
   ready:false,
@@ -12,6 +14,7 @@ export const stationView = {
   setPointer:()=>{},
   boardChemHit:()=>null,
   boardChemRotate:()=>{},
+  boardChemFinish:()=>{},
 };
 
 const get = id => document.getElementById(id);
@@ -66,7 +69,15 @@ function startStation() {
     board,workspace,localVideo:get('local-video'),remoteVideo:get('remote-video'),
     projectedVideo:get('projected-video'),projection:get('projection'),
   });
-  const chemistry=createPreviewMolecules(cabin.group,{rig});
+  let roomRole=workspace.dataset.roomRole || null;
+  let roomSeat=workspace.dataset.seat || roomRole;
+  const canRotate=()=>roomRole!=='student';
+  const seating=createSharedSeating(cabin.group,()=>{needsFrame=true;});
+  const avatarMenu=createXRAvatarMenu(scene,rig,()=>renderer.xr.getReferenceSpace(),()=>workspace.dataset.avatar,
+    avatar=>workspace.dispatchEvent(new CustomEvent('room-avatar-choice',{detail:avatar})));
+  const chemistry=createPreviewMolecules(cabin.group,{rig,canRotate,onPose:(key,rotation,final=false)=>{
+    if (roomRole==='teacher') workspace.dispatchEvent(new CustomEvent('room-chemistry-pose',{detail:{key,rotation,final}}));
+  }});
   const lounge=createCastleLounge(scene);
   const reduce=matchMedia('(prefers-reduced-motion: reduce)');
   const raycaster=new THREE.Raycaster();
@@ -79,6 +90,8 @@ function startStation() {
   const headQuaternion=new THREE.Quaternion();
   let preview=false, xrSession=null, xrSupported=false, opening=false, ownFullscreen=false;
   let yaw=0,pitch=0,drag=null,lastFrame=null,needsFrame=true,layoutRequest=null,xrAlign=false;
+  let lastHead=null,lastHeadAt=-Infinity;
+  const xrUp=new THREE.Vector3(0,1,0);
   lounge.group.userData.requestRender=()=>{needsFrame=true;};
   const inClassroom=()=>document.body.dataset.station==='classroom';
 
@@ -133,7 +146,7 @@ function startStation() {
     renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.75));
     renderer.setSize(width,height,false);
     camera.aspect=width/height;
-    camera.fov=width<680?65:classroom?51:55;
+    camera.fov=width<680?65:classroom?(roomRole?64:51):55;
     camera.updateProjectionMatrix();
     // The same live, three-dimensional sky is outside both rooms. Opaque
     // castle masonry still occludes it; the rear glazing opens onto it.
@@ -142,8 +155,9 @@ function startStation() {
     lounge.group.visible=!classroom;
     cabin.group.visible=classroom;
     sky.resize(height,renderer.getPixelRatio());
-    cabin.layout(camera,width,height,classroom?board.getBoundingClientRect():null,classroom);
-    chemistry.layout(cabin.boardSurface());
+    cabin.layout(camera,width,height,classroom?board.getBoundingClientRect():null,classroom,roomRole?SHARED_BOARD:null);
+    const surface=cabin.boardSurface();
+    chemistry.layout(surface ? {...surface,shared:Boolean(roomRole)} : null);
     lounge.layout(camera,width,height);
     positionPortraitButtons();
     needsFrame=true;
@@ -154,9 +168,23 @@ function startStation() {
     if (layoutRequest===null) layoutRequest=requestAnimationFrame(layout);
   }
 
+  const viewerSeat = () => {
+    const seat=inClassroom()?roomSeat:null;
+    const view=seatedView(seat,workspace.dataset.avatar);
+    if (seat==='student-2') {
+      const [x,,z]=view.position;
+      const boardYaw=Math.atan2(x-SHARED_BOARD.x,BOARD_DEPTH+z);
+      // Turn the gaze toward the board while keeping the angled chair fixed.
+      view.yaw=Math.max(boardYaw,view.yaw-Math.PI/4);
+    }
+    return view;
+  };
   function pose() {
-    camera.position.set(0,0,0);
-    camera.rotation.set(pitch,yaw,0,'YXZ');
+    const sharedSeat=inClassroom() && roomSeat;
+    const view=viewerSeat();
+    if (xrSession) camera.position.set(0,0,0);
+    else camera.position.fromArray(view.position);
+    camera.rotation.set(xrSession?0:pitch-(sharedSeat ? .06 : 0),xrSession?0:view.yaw+yaw,0,'YXZ');
     camera.updateMatrixWorld(true);
     centerButton.hidden=Math.abs(yaw)+Math.abs(pitch)<.005;
     positionPortraitButtons();
@@ -172,14 +200,17 @@ function startStation() {
     vrButton.textContent=value?(inClassroom()?'Back to Classroom':'Back to Lounge'):'Enter VR';
     yaw=0;pitch=0;drag=null;
     for (const surface of [container,workspace,lobby]) surface.classList.remove('is-looking');
+    if (inClassroom()) workspace.dispatchEvent(new CustomEvent('room-vr-mode',{detail:value}));
     pose();
-    status.textContent=value&&!xrSession?(inClassroom()?'Drag the room to look around, or drag a molecule to turn it. Esc to return.':'Drag to look around. Press Esc to return.'):'';
+    status.textContent=value&&!xrSession?(inClassroom()&&canRotate()?'Drag the room to look around, or drag a molecule to turn it. Esc to return.':'Drag to look around. Press Esc to return.'):'';
   }
 
   function exitPreview() {
     rig.position.set(0,0,0);
     rig.rotation.set(0,0,0);
     xrAlign=false;
+    avatarMenu.attach(null);
+    lastHead=null;lastHeadAt=-Infinity;
     setPreview(false);
     if (ownFullscreen&&document.fullscreenElement===document.documentElement) {
       void document.exitFullscreen().catch(()=>{});
@@ -223,7 +254,10 @@ function startStation() {
       try {
         await renderer.xr.setSession(session);
         xrAlign=true;
-        if (inClassroom()) chemistry.attachXR(session);
+        if (inClassroom()) {
+          chemistry.attachXR(session);
+          if (roomRole) avatarMenu.attach(session,viewerSeat());
+        }
       } catch(error) {
         await session.end().catch(()=>{});
         throw error;
@@ -245,7 +279,7 @@ function startStation() {
       if (!surface.contains(event.target)||event.defaultPrevented||xrSession||drag||event.button!==0||preview!==immersiveOnly) return;
       if (event.target.closest('button,a,input,select,summary,dialog')) return;
       if ((surface===workspace&&!inClassroom())||(surface===lobby&&inClassroom())) return;
-      const model=immersiveOnly&&inClassroom()?chemistry.hitTest(rayAt(event)):null;
+      const model=immersiveOnly&&inClassroom()&&canRotate()?chemistry.hitTest(rayAt(event)):null;
       drag={id:event.pointerId,x:event.clientX,y:event.clientY,model};
       surface.setPointerCapture(event.pointerId);
       surface.classList.add('is-looking');
@@ -260,6 +294,7 @@ function startStation() {
     for (const type of ['pointerup','pointercancel','lostpointercapture']) {
       surface.addEventListener(type,event=>{
         if (drag?.id!==event.pointerId) return;
+        if (drag.model) chemistry.finish(drag.model);
         drag=null;surface.classList.remove('is-looking');
       });
     }
@@ -268,7 +303,7 @@ function startStation() {
   bindLook(lobby,false);
   bindLook(container,true);
   document.addEventListener('keydown',event=>{
-    if (xrSession||document.querySelector('dialog[open]')) return;
+    if (xrSession||event.defaultPrevented||document.querySelector('dialog[open]')) return;
     if (event.key==='Escape'&&preview) {exitPreview();return;}
     if (event.target.closest?.('input,select,textarea,[contenteditable]')) return;
     const directions={ArrowLeft:[.065,0],ArrowRight:[-.065,0],ArrowUp:[0,.065],ArrowDown:[0,-.065]};
@@ -288,6 +323,19 @@ function startStation() {
   workspace.addEventListener('room-board-chemistry',event=>{
     chemistry.setModels(event.detail);needsFrame=true;
   });
+  workspace.addEventListener('room-presence',event=>{
+    const {role,seat=role,peers=[]}=event.detail;
+    if (roomRole!==role || roomSeat!==seat) {
+      roomRole=role;
+      roomSeat=seat;
+      pose(); scheduleLayout();
+    }
+    seating.show(roomSeat,peers);
+    needsFrame=true;
+  });
+  workspace.addEventListener('room-local-avatar',()=>{
+    if (inClassroom() && !xrSession) pose();
+  });
   new MutationObserver(()=>{
     if (xrSession) void xrSession.end().catch(()=>{});
     if (preview) exitPreview();
@@ -300,6 +348,7 @@ function startStation() {
   stationView.hitModel=event=>cabin.hitModel(rayAt(event));
   stationView.boardChemHit=event=>chemistry.hitTest(rayAt(event));
   stationView.boardChemRotate=(key,dx,dy)=>{chemistry.rotate(key,dx,dy);needsFrame=true;};
+  stationView.boardChemFinish=key=>chemistry.finish(key);
   stationView.setPointer=state=>{cabin.setPointer(state);needsFrame=true;};
   stationView.ready=true;
   document.body.dataset.stationRendered='true';
@@ -308,14 +357,18 @@ function startStation() {
   renderer.setAnimationLoop((time,xrFrame)=>{
     const immersive=renderer.xr.isPresenting;
     if (document.hidden&&!immersive) return;
-    if (immersive&&xrAlign&&xrFrame) {
-      const viewer=xrFrame.getViewerPose(renderer.xr.getReferenceSpace());
+    const refSpace=immersive&&xrFrame?renderer.xr.getReferenceSpace():null;
+    if (refSpace && xrAlign) {
+      const viewer=xrFrame.getViewerPose(refSpace);
       if (viewer) {
         const {position,orientation}=viewer.transform;
         headQuaternion.set(orientation.x,orientation.y,orientation.z,orientation.w);
         headDirection.set(0,0,-1).applyQuaternion(headQuaternion);
-        rig.rotation.y=Math.atan2(headDirection.x,-headDirection.z);
-        rig.position.copy(new THREE.Vector3(position.x,position.y,position.z).applyAxisAngle(new THREE.Vector3(0,1,0),rig.rotation.y)).negate();
+        const view=viewerSeat();
+        const [x,y,z]=view.position;
+        rig.rotation.y=Math.atan2(headDirection.x,-headDirection.z)+view.yaw;
+        rig.position.set(position.x,position.y,position.z).applyAxisAngle(xrUp,rig.rotation.y).negate();
+        rig.position.x+=x; rig.position.y+=y; rig.position.z+=z;
         xrAlign=false;
       }
     }
@@ -327,7 +380,26 @@ function startStation() {
     sky.update(reduce.matches?0:elapsed);
     if (inClassroom()) {
       cabin.update(time,elapsed,preview);
-      if (immersive&&xrFrame&&!xrAlign) chemistry.updateXR(xrFrame,renderer.xr.getReferenceSpace());
+      if (refSpace&&!xrAlign) {
+        chemistry.updateXR(xrFrame,refSpace);
+        avatarMenu.update(xrFrame,refSpace);
+        if (workspace.dataset.avatar!=='orange-cat' || !roomSeat) lastHead=null;
+        else if (time-lastHeadAt>=125) {
+          const viewer=xrFrame.getViewerPose(refSpace);
+          if (viewer) {
+            const q=viewer.transform.orientation;
+            headQuaternion.set(q.x,q.y,q.z,q.w);
+            headDirection.set(0,0,-1).applyQuaternion(headQuaternion).applyAxisAngle(xrUp,rig.rotation.y-seatPose(roomSeat).yaw);
+            const headYaw=THREE.MathUtils.clamp(Math.atan2(-headDirection.x,-headDirection.z),-.90,.90);
+            const headPitch=THREE.MathUtils.clamp(-Math.asin(THREE.MathUtils.clamp(headDirection.y,-1,1)),-.55,.55);
+            if (!lastHead || Math.hypot(headYaw-lastHead.headYaw,headPitch-lastHead.headPitch)>.025) {
+              lastHead={headYaw,headPitch};lastHeadAt=time;
+              workspace.dispatchEvent(new CustomEvent('room-avatar-head',{detail:lastHead}));
+            }
+          }
+        }
+      }
+      seating.update(time/1000,elapsed,reduce.matches);
       chemistry.update(time/1000,elapsed);
     } else lounge.update(time,elapsed,reduce.matches);
     renderer.render(scene,camera);

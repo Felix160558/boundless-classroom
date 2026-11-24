@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="referrer" content="no-referrer">
   <title>The Common Room · Boundless Classroom</title>
-  <link rel="stylesheet" href="./live.css?v=student-avatar-49">
+  <link rel="stylesheet" href="./live.css?v=trio-online-54">
   <link rel="stylesheet" href="./room-pointer.css?v=medieval-lounge-40">
 </head>
-<body data-station="lounge">
+<body data-station="lounge" data-room-service="https://boundless-shared-classroom.1339089613.workers.dev">
   <div id="room-sky" aria-hidden="true"></div>
   <header class="topbar">
     <a class="brand" href="../#home" aria-label="Boundless Classroom home">
@@ -19,10 +19,18 @@
     <div class="room-header" id="room-header" hidden>
       <p id="connection-status" role="status"></p>
       <button id="room-title" type="button" title="Copy Room Code"></button>
-      <button id="share-room" type="button">Share Link</button>
+      <button id="share-room" type="button">Invite Students</button>
     </div>
     <button id="center-station" type="button" hidden>Center View</button>
     <a id="avatar-preview" href="./student-avatar.html?v=student-avatar-49&amp;pose=seated" target="_blank" rel="noopener" aria-label="Preview the Orange Cat student avatar">Avatar</a>
+    <details id="avatar-menu" class="avatar-menu" hidden>
+      <summary>Avatar</summary>
+      <div class="avatar-options" role="group" aria-label="Classroom avatar">
+        <button type="button" data-avatar="orange-cat" aria-pressed="false">Orange Cat</button>
+        <button type="button" data-avatar="simple" aria-pressed="true">Simple Figure</button>
+        <a href="./student-avatar.html?v=student-avatar-49&amp;pose=seated" target="_blank" rel="noopener">Preview Orange Cat ↗</a>
+      </div>
+    </details>
     <button id="station-vr" class="vr-entry" type="button" aria-pressed="false">Enter VR</button>
     <a id="leave" href="../#home">Exit to Home</a>
   </header>
@@ -54,7 +62,7 @@
       </div>
     </section>
 
-    <section id="room" class="classroom" aria-label="One-to-One Classroom" tabindex="-1" hidden>
+    <section id="room" class="classroom" aria-label="Shared Classroom" tabindex="-1" hidden>
       <div class="workspace" id="workspace">
         <figure class="portrait self-portrait" id="local-display" hidden>
           <div class="portrait-image">
@@ -64,12 +72,12 @@
         </figure>
         <figure class="portrait peer-portrait" id="remote-display" hidden>
           <div class="portrait-image">
-            <video id="remote-video" autoplay playsinline aria-label="Other participant’s camera"></video>
+            <video id="remote-video" autoplay muted playsinline aria-label="Other participant’s camera"></video>
           </div>
           <figcaption id="remote-caption">Other participant</figcaption>
         </figure>
         <section class="board-panel" aria-label="Shared whiteboard">
-          <canvas id="board" width="1600" height="760" aria-label="Shared whiteboard. Both participants can write with a mouse or stylus."></canvas>
+          <canvas id="board" width="1600" height="760" aria-label="Shared whiteboard. Everyone can write with a mouse or stylus."></canvas>
           <p id="board-hint">Write a formula or name, then circle it.</p>
           <div id="projection" class="projection" hidden>
             <video id="projected-video" autoplay muted playsinline aria-label="Teacher’s shared screen"></video>
@@ -80,13 +88,14 @@
       </div>
 
       <footer class="room-dock">
+        <div id="remote-audio" hidden></div>
         <p class="board-status" id="board-status" role="status"></p>
         <div class="room-controls">
           <button id="start-media" type="button">Enable Mic</button>
           <button id="mute" type="button" aria-pressed="false" hidden>Mute Mic</button>
           <button id="stop-media" type="button" hidden>Disable Mic</button>
-          <button id="camera-toggle" type="button" aria-pressed="false">Enable Camera</button>
-          <button id="play-remote" type="button" hidden>Play Audio</button>
+          <button id="camera-toggle" type="button" aria-pressed="false" hidden>Enable Camera</button>
+          <button id="play-remote" type="button" hidden>Enable Audio</button>
           <button id="cast-toggle" type="button" aria-pressed="false" hidden>Share Screen</button>
           <button id="projection-toggle" type="button" hidden>Show Whiteboard</button>
           <details class="tool-menu" id="tools">
@@ -165,14 +174,29 @@
 
   <dialog id="share-dialog" aria-labelledby="share-title">
     <button id="close-share" class="close-entry" type="button" aria-label="Close invitation">×</button>
-    <h2 id="share-title">Invite someone</h2>
+    <p class="invite-kicker">Boundless Classroom</p>
+    <h2 id="share-title">Classroom invitation</h2>
     <p id="share-details"></p>
+    <label class="sr-only" for="share-code">Room code</label>
+    <input id="share-code" type="text" readonly spellcheck="false">
     <label class="sr-only" for="share-link">Classroom invitation link</label>
     <input id="share-link" type="url" readonly spellcheck="false">
-    <button id="copy-share-link" class="primary" type="button">Copy Invitation</button>
+    <button id="copy-share-link" class="primary" type="button" autofocus>Copy Invitation</button>
     <p id="share-feedback" role="status"></p>
   </dialog>
 
-  <script type="module" src="./live.js?v=ink-chemboard-42"></script>
+  <dialog id="host-dialog" aria-labelledby="host-title">
+    <button id="close-host" class="close-entry" type="button" aria-label="Close">×</button>
+    <p class="invite-kicker">Boundless Classroom</p>
+    <h2 id="host-title">Open a classroom</h2>
+    <form id="host-form">
+      <label for="host-key">Teacher access key</label>
+      <input id="host-key" type="password" maxlength="128" autocomplete="off" required>
+      <button class="primary" type="submit">Open Room</button>
+      <p id="host-feedback" role="status"></p>
+    </form>
+  </dialog>
+
+  <script type="module" src="./live.js?v=trio-online-54"></script>
 </body>
 </html>

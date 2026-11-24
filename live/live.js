@@ -4,13 +4,15 @@ import {MOLECULE_CATALOG} from '../molecule-catalog.js?v=quiet-shape-31';
 import {createRoomCast} from './room-cast.js?v=station-room-38';
 import {createRoomPointer} from './room-pointer.js?v=station-room-38';
 import {mountAppointment} from './appointment.js?v=medieval-lounge-40';
-import {mountRoomInvitation, roomCodeFromURL} from './room-invitation.js?v=medieval-lounge-40';
-import {stationView} from './room-sky.js?v=ink-chemboard-42';
-import {createPreviewRoom, isPagesPreview, PREVIEW_NOTICE} from './preview-room.js?v=ink-chemboard-42';
+import {mountRoomInvitation, roomCodeFromURL, roomServiceOrigin} from './room-invitation.js?v=trio-online-54';
+import {stationView} from './room-sky.js?v=trio-classroom-50';
+import {createPreviewRoom, isPagesPreview, PREVIEW_NOTICE} from './preview-room.js?v=trio-online-54';
 
 import {lookupBoardMolecule, recognizeBoardMolecule, selectCircledInk, strokesAtEraser} from './board-chemistry.js?v=ink-chemboard-42';
 
-const soloPreview = isPagesPreview(window.location.hostname);
+const roomService = roomServiceOrigin(document.body.dataset.roomService);
+const configurationError = roomService === null ? 'The room service is misconfigured. Contact the classroom host.' : '';
+const soloPreview = roomService === '' && isPagesPreview(window.location.hostname);
 const previewRoom = soloPreview ? createPreviewRoom({onEvent:applyEvent}) : null;
 
 const $ = id => document.getElementById(id);
@@ -21,16 +23,21 @@ const workspace = $('workspace');
 const lobbyDialog = $('join-dialog');
 const moleculePicker = $('molecule-select');
 const correction = $('ink-correction');
+const avatarMenu = $('avatar-menu');
+const avatarButtons = [...avatarMenu.querySelectorAll('[data-avatar]')];
+const avatarTypes = new Set(avatarButtons.map(button=>button.dataset.avatar));
+const avatarStorageKey = role=>`boundless.classroom.avatar.${role}`;
+const savedAvatars = new Map();
 const errors = {
-  role_taken:'This room already has someone in that role.',
+  role_taken:'That role already has an occupant in this room.',
   room_not_found:'Room not found. Ask the teacher to open it and check the code.',
   invalid_join:'Enter a room code with 6–12 letters or digits.',
   invalid_code:'Use 6–12 letters or digits.',
   session_expired:'Your session has expired. Rejoin the classroom.',
-  room_full:'This classroom is full. Try another room code.',
-  board_full:'The whiteboard is full. Agree with your partner before clearing it.',
+  room_full:'Both student seats are occupied. Ask the teacher for another room code.',
+  board_full:'The whiteboard is full. Check with the room before clearing it.',
   rate_limited:'Too many requests. Try again in a moment.',
-  request_timeout:'The local server took too long to respond. If you were joining, try again in a minute.',
+  request_timeout:'The room service took too long to respond. If you were joining, try again in a minute.',
   stale_epoch:'The board was just cleared. That stroke was discarded.',
   invalid_molecule:'This molecule is unavailable.',
   invalid_chemistry:'Circle one formula or name at a time.',
@@ -38,28 +45,40 @@ const errors = {
   chemistry_full:'Erase one of the three labels to make room for another model.',
   ink_already_linked:'That ink already has a model.',
   teacher_required:'The teacher controls this tool.',
+  host_key_required:'This teacher access key was not accepted.',
 };
-let session = null, generation = 0, joining = false, leaving = false, peer = null, other = null;
+let session = null, generation = 0, joining = false, leaving = false;
+const peers = new Map();
 let microphone = null, cameraStream = null, pollController = null, sequence = 0;
 const capturing = {audio:false,video:false};
 let stroke = null, pointerId = null, penColor = '#243447';
 let eraser = false, erasePath = null, inkTarget = null, inkRevision = 0, chemistry = [];
 let inkNoteUntil = 0;
+const pendingPoses=new Map();
+let poseTimer=null, sendingPose=false;
 let online = false, clearBusy = false, uploadQueue = Promise.resolve(), pendingWrites = 0;
 let frame = null;
 let hostedCode = null;
+let hostFormCode = null;
+let checkingEntry = false;
 let modelDrag = null;
 let currentMolecule = null, confirmedMolecule = null, moleculeRenderer = null, moleculeLoad = null;
 let remotePresentation = false, boardDuringPresentation = false, lastCastStream = null, castRevision = 0;
+let activeAvatar = 'simple', trackedHead = null;
 const mediaText = text => { $('media-status').textContent = text; };
 const boardText = text => { $('board-status').textContent = text; };
 const message = error => errors[error.code] || (error.name === 'AbortError' ? 'Connection cancelled.' : error.message || 'Connection unavailable.');
 function roomStatus(text) {
   $('connection-status').textContent = soloPreview ? PREVIEW_NOTICE : text;
-  if (soloPreview && text && !/^(Waiting |Both participants)/.test(text)) mediaText(text);
+  if (soloPreview && text) mediaText(text);
+}
+function updateRoomOccupancy() {
+  const capacity = session?.seat ? 3 : 2;
+  roomStatus(soloPreview ? '' : `${peers.size+1} / ${capacity} joined`);
 }
 
 async function api(path, body, {token = session?.token, signal, keepalive = false} = {}) {
+  if (configurationError) throw new Error(configurationError);
   if (previewRoom) return previewRoom.request(path, body, {token});
   const headers = {'Accept':'application/json'};
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -67,9 +86,9 @@ async function api(path, body, {token = session?.token, signal, keepalive = fals
   const controller = signal ? null : new AbortController();
   const timer = controller ? setTimeout(() => controller.abort(), 15000) : null;
   try {
-    const response = await fetch(`/live-api/${path}`, {method:body === undefined ? 'GET' : 'POST',headers,body:body === undefined ? undefined : JSON.stringify(body),signal:signal || controller?.signal,keepalive,cache:'no-store',credentials:'omit'});
+    const response = await fetch(`${roomService}/live-api/${path}`, {method:body === undefined ? 'GET' : 'POST',headers,body:body === undefined ? undefined : JSON.stringify(body),signal:signal || controller?.signal,keepalive,cache:'no-store',credentials:'omit',redirect:'error'});
     let data;
-    try { data = await response.json(); } catch { throw new Error('Open this classroom from the local preview.'); }
+    try { data = await response.json(); } catch { throw new Error('The room service could not respond. Check the invitation and try again.'); }
     if (!response.ok) { const e = new Error(data.message || 'The request could not be completed. Try again.'); e.code = data.error; e.data = data; throw e; }
     return data;
   } catch (e) {
@@ -112,6 +131,7 @@ const sendMolecule = roomPublisher('molecule', result => {
 const sendPointer = roomPublisher('pointer');
 const sendPresentation = roomPublisher('presentation', undefined, mediaText, 0);
 const sendCamera = roomPublisher('camera', undefined, mediaText, 0, false);
+const sendAvatar = roomPublisher('avatar', undefined, () => {}, 120, false);
 const pointer = createRoomPointer(workspace, canvas, {
   onMove:sendPointer,
   pointOnBoard:point,
@@ -198,6 +218,16 @@ function sendingStream() {
   return tracks.length ? new MediaStream(tracks) : null;
 }
 
+async function setPeerStreams() {
+  const stream = sendingStream();
+  const connectedPeers = [...peers.values()].filter(remote => remote.connection);
+  const updates = await Promise.allSettled(connectedPeers.map(remote => remote.connection.setStream(stream)));
+  return updates.every(({status},index) => {
+    const remote = connectedPeers[index];
+    return status==='fulfilled' || peers.get(remote.person.peerId)!==remote;
+  });
+}
+
 async function castChanged({stream:display}) {
   updateMediaButtons();
   if (lastCastStream === display) return;
@@ -206,15 +236,10 @@ async function castChanged({stream:display}) {
   updateProjection();
   if (session?.role !== 'teacher') return;
   const revision = ++castRevision, roomGeneration = generation;
-  try {
-    await peer?.setStream(sendingStream());
-    if (revision !== castRevision || roomGeneration !== generation) return;
-    void sendPresentation({active:Boolean(display)});
-  } catch {
-    if (revision !== castRevision || roomGeneration !== generation) return;
-    cast.stop();
-    mediaText('The shared screen could not be sent.');
-  }
+  const updated = await setPeerStreams();
+  if (revision !== castRevision || roomGeneration !== generation) return;
+  void sendPresentation({active:Boolean(display)});
+  if (display && !updated) mediaText('Some participants may not see the shared screen.');
 }
 
 function setPointerMode(enabled) {
@@ -279,6 +304,108 @@ function updateChemistry(entries) {
   chemistry = entries;
   workspace.dispatchEvent(new CustomEvent('room-board-chemistry',{detail:entries}));
 }
+function scheduleChemistryPose(delay=70) {
+  if (poseTimer!==null || sendingPose || !pendingPoses.size || !online) return;
+  poseTimer=setTimeout(flushChemistryPose,delay);
+}
+async function flushChemistryPose() {
+  poseTimer=null;
+  if (!session || !online || sendingPose) return;
+  const next=pendingPoses.entries().next().value;
+  if (!next) return;
+  const [key,change]=next;
+  pendingPoses.delete(key);
+  if (change.epoch!==board.epoch || !chemistry.some(item=>item.key===key)) { scheduleChemistryPose(); return; }
+  sendingPose=true;
+  const {token}=session, g=generation;
+  try { await api('chemistry-pose',{key,epoch:change.epoch,rotation:change.rotation},{token}); }
+  catch (error) {
+    if (g===generation && change.epoch===board.epoch && chemistry.some(item=>item.key===key) &&
+        !['missing_stroke','stale_epoch','session_expired','teacher_required','invalid_chemistry'].includes(error.code) &&
+        !pendingPoses.has(key) && (change.retries || 0)<2) {
+      pendingPoses.set(key,{...change,retries:(change.retries || 0)+1});
+    }
+  } finally { sendingPose=false; scheduleChemistryPose(70); }
+}
+workspace.addEventListener('room-chemistry-pose',event=>{
+  if (soloPreview || session?.role!=='teacher') return;
+  const {key,rotation,final}=event.detail;
+  if (!chemistry.some(item=>item.key===key)) return;
+  pendingPoses.set(key,{rotation,epoch:board.epoch});
+  if (final && poseTimer!==null) { clearTimeout(poseTimer); poseTimer=null; }
+  scheduleChemistryPose(final?0:70);
+});
+function updatePresence() {
+  const role=soloPreview?null:session?.role || null;
+  const seat=role ? session.seat || role : null;
+  if (role) {
+    workspace.dataset.roomRole=role;
+    workspace.dataset.seat=seat;
+  } else {
+    delete workspace.dataset.roomRole;
+    delete workspace.dataset.seat;
+  }
+  const detail={role,seat,peers:role ? [...peers.values()].map(remote=>remote.person) : []};
+  workspace.dispatchEvent(new CustomEvent('room-presence',{detail}));
+}
+function preferredAvatar(role) {
+  if (savedAvatars.has(role)) return savedAvatars.get(role);
+  try {
+    const saved=localStorage.getItem(avatarStorageKey(role));
+    return avatarTypes.has(saved)?saved:null;
+  } catch { return null; }
+}
+function syncAvatar() {
+  if (!soloPreview && session) void sendAvatar({avatar:activeAvatar,...trackedHead});
+}
+function renderAvatarChoice() {
+  avatarMenu.hidden=!session || soloPreview;
+  if (avatarMenu.hidden) avatarMenu.open=false;
+  if (workspace.dataset.avatar!==activeAvatar) {
+    workspace.dataset.avatar=activeAvatar;
+    workspace.dispatchEvent(new Event('room-local-avatar'));
+  }
+  for (const button of avatarButtons) button.setAttribute('aria-pressed',String(button.dataset.avatar===activeAvatar));
+}
+function chooseAvatar(avatar, explicit=false) {
+  if (!session || soloPreview || !avatarTypes.has(avatar)) return;
+  if (explicit) {
+    savedAvatars.set(session.role,avatar);
+    try { localStorage.setItem(avatarStorageKey(session.role),avatar); } catch { /* This room still keeps the choice. */ }
+  }
+  if (activeAvatar===avatar) return;
+  activeAvatar=avatar; trackedHead=null;
+  renderAvatarChoice();
+  syncAvatar();
+}
+for (const button of avatarButtons) {
+  button.addEventListener('click',()=>{
+    chooseAvatar(button.dataset.avatar,true);
+    avatarMenu.open=false;
+    avatarMenu.querySelector('summary').focus();
+  });
+}
+document.addEventListener('pointerdown',event=>{
+  if (avatarMenu.open && !avatarMenu.contains(event.target)) avatarMenu.open=false;
+});
+document.addEventListener('keydown',event=>{
+  if (event.key!=='Escape' || !avatarMenu.open) return;
+  avatarMenu.open=false;
+  avatarMenu.querySelector('summary').focus();
+  event.preventDefault();
+});
+workspace.addEventListener('room-avatar-choice',event=>chooseAvatar(event.detail,true));
+workspace.addEventListener('room-vr-mode',event=>{
+  if (event.detail && session?.role==='student' && !preferredAvatar('student')) chooseAvatar('orange-cat');
+  if (!event.detail && trackedHead) { trackedHead=null; syncAvatar(); }
+});
+workspace.addEventListener('room-avatar-head',event=>{
+  if (activeAvatar!=='orange-cat' || !session) return;
+  trackedHead=event.detail;
+  syncAvatar();
+});
+workspace.addEventListener('station-ready',updatePresence);
+workspace.addEventListener('station-ready',()=>updateChemistry(chemistry));
 function cancelInkSelection() {
   inkRevision++; inkTarget=null;
   if (correction.open) correction.close();
@@ -301,7 +428,7 @@ function updateBoardStatus() {
   if (soloPreview) { boardText('Whiteboard · this tab only'); return; }
   if (!online) boardText('Reconnecting. Writing is paused.');
   else if (pendingWrites) boardText(`Syncing ${pendingWrites}…`);
-  else boardText(other ? 'Whiteboard synced' : 'Whiteboard ready');
+  else boardText(peers.size ? 'Whiteboard synced' : 'Whiteboard ready');
 }
 function queueBoard(operation) {
   if (!session || !online || clearBusy) return Promise.resolve(false);
@@ -333,6 +460,7 @@ function addSelectedModel(target,id) {
   void queueBoard({chemistry:{key:crypto.randomUUID(),id,strokes:target.strokes}});
 }
 async function identifyInk(selected,ratio) {
+  if (!soloPreview && session?.role!=='teacher') { inkNote('The teacher opens 3D models.'); return; }
   cancelInkSelection();
   const ids=selected.map(ink=>ink.id);
   if (chemistry.some(item=>item.strokes.some(id=>ids.includes(id)))) { inkNote('Circle only ink that has no model yet.'); return; }
@@ -371,7 +499,7 @@ function point(event, clamp=false) {
 }
 workspace.addEventListener('pointerdown', e => {
   if (!session || e.altKey || (e.pointerType==='mouse' && e.button!==0)) return;
-  const chemKey=stationView.ready && !eraser && !pointer.isEnabled() ? stationView.boardChemHit(e) : null;
+  const chemKey=stationView.ready && (soloPreview || session.role==='teacher') && !eraser && !pointer.isEnabled() ? stationView.boardChemHit(e) : null;
   if (chemKey || (stationView.ready && !eraser && currentMolecule && online && session.role==='teacher' && stationView.hitModel(e))) {
     if (pointerId!==null || modelDrag) return;
     e.preventDefault();
@@ -415,7 +543,10 @@ workspace.addEventListener('pointermove', e => {
   else if (stroke) { addInkPoint(stroke.points,position); render(); }
 });
 function finishStroke(e) {
-  if (modelDrag?.id===e.pointerId) modelDrag=null;
+  if (modelDrag?.id===e.pointerId) {
+    if (modelDrag.chemKey) stationView.boardChemFinish(modelDrag.chemKey);
+    modelDrag=null;
+  }
   if (e.pointerId!==pointerId) return;
   if (e.type!=='pointerup') { cancelStroke(); return; }
   const completed=stroke, trail=erasePath, ratio=aspect();
@@ -427,7 +558,7 @@ function finishStroke(e) {
     for (let i=0;i<erased.length;i+=128) void queueBoard({erase:erased.slice(i,i+128)});
   } else if (completed) {
     const selected=selectCircledInk(completed.points,board.values(),ratio);
-    if (selected?.length) void identifyInk(selected,ratio);
+    if (selected?.length && (soloPreview || session?.role==='teacher')) void identifyInk(selected,ratio);
     else void queueBoard({stroke:completed});
   }
 }
@@ -444,7 +575,7 @@ document.querySelectorAll('[data-color]').forEach(button => button.addEventListe
   setEraser(false); penColor=button.dataset.color; document.querySelectorAll('[data-color]').forEach(b => { const selected=b===button; b.classList.toggle('active',selected); b.setAttribute('aria-pressed',String(selected)); });
 }));
 $('clear').addEventListener('click', async () => {
-  if (!session || !online || clearBusy || !window.confirm(soloPreview ? 'Clear this preview whiteboard? This cannot be undone.' : 'Clear the whiteboard for both participants? This cannot be undone.')) return;
+  if (!session || !online || clearBusy || !window.confirm(soloPreview ? 'Clear this preview whiteboard? This cannot be undone.' : 'Clear the shared whiteboard for everyone? This cannot be undone.')) return;
   clearBusy=true; $('clear').disabled=true; cancelStroke(); const g=generation;
   try { await uploadQueue; if (g!==generation) return; const cleared=await api('board',{epoch:board.epoch,clear:true});
     if (g===generation && board.clear(cleared.epoch)) { cancelInkSelection(); updateChemistry([]); render(); } }
@@ -452,75 +583,137 @@ $('clear').addEventListener('click', async () => {
   finally { if(g===generation) { clearBusy=false; $('clear').disabled=false; } }
 });
 
-function closePeer() {
-  peer?.close();
-  peer=null;
-  other=null;
-  $('remote-video').srcObject=null;
-  $('play-remote').hidden=true;
-  showRemoteVideo();
+function updateAudioButton() {
+  $('play-remote').hidden = ![...peers.values()].some(remote => remote.audioBlocked);
+}
+
+async function playRemoteAudio(remote) {
+  const {audio} = remote;
+  const stream = audio?.srcObject;
+  if (!stream) return true;
+  let playing = true;
+  try { await audio.play(); }
+  catch { playing = false; }
+  if (peers.get(remote.person.peerId)===remote && audio.srcObject===stream) {
+    remote.audioBlocked = !playing;
+    updateAudioButton();
+    return playing;
+  }
+  return true;
+}
+
+function removePeer(peerId) {
+  const remote = peers.get(peerId);
+  if (!remote) return false;
+  peers.delete(peerId);
+  if (remote.audio) {
+    remote.audio.srcObject = null;
+    remote.audio.remove();
+  }
+  remote.connection?.close();
+  return true;
 }
 
 function showRemoteVideo() {
   const presenting=session?.role==='student' && remotePresentation;
-  const active=Boolean(other?.cameraActive && !presenting);
-  const track=$('remote-video').srcObject?.getVideoTracks()[0];
+  const sources=[...peers.values()];
+  const source=sources.find(remote => presenting ? remote.person.role==='teacher' : remote.person.cameraActive);
+  const display=source?.stream?.getVideoTracks().length ? source.stream : null;
+  const video=$('remote-video');
+  if (video.srcObject!==display) video.srcObject=display;
+  const track=display?.getVideoTracks()[0];
+  const active=Boolean(source && !presenting);
   workspace.dataset.remoteCamera=String(active);
   $('remote-display').hidden=!(active && track?.readyState==='live' && !track.muted);
+  if (active && display && video.paused) void video.play().catch(()=>{});
   updateProjection();
 }
 
-function connectPeer(person) {
-  if (other?.peerId===person.peerId) {
-    other=person;
-    showRemoteVideo();
-    return;
+function updateRemoteMedia() {
+  updatePresence();
+  updateAudioButton();
+  showRemoteVideo();
+}
+
+function reportCallState() {
+  const states = [...peers.values()].map(remote => remote.state);
+  if (states.includes('failed') || states.includes('disconnected')) {
+    mediaText(states.includes('connected') ? 'One voice connection was interrupted.' : 'Voice was interrupted. Rejoin to retry.');
+  } else if (states.includes('connecting')) {
+    mediaText('Connecting voice…');
+  } else if (states.includes('connected')) {
+    mediaText('Voice connected');
   }
-  closePeer();
-  other=person;
-  $('remote-caption').textContent=person.role==='teacher'?'Teacher':'Student';
-  roomStatus('Both participants joined');
-  updateBoardStatus();
+}
+
+function upsertPeer(person) {
+  const {peerId:target,role}=person;
+  if (!target || target===session.peerId) return;
+  const peerView={...person,seat:person.seat || role};
+  const existing=peers.get(target);
+  if (existing) { existing.person=peerView; return; }
+  const remote={person:peerView,connection:null,stream:null,audio:null,audioBlocked:false,state:'new'};
+  peers.set(target,remote);
   if (!globalThis.RTCPeerConnection) {
-    mediaText('Video and audio are unavailable in this browser. The whiteboard is ready.');
+    mediaText('Voice is unavailable in this browser. The whiteboard is ready.');
     return;
   }
-  const g=generation, token=session.token, target=person.peerId;
-  peer=new ClassroomPeer({
-    polite:session.role==='student',
-    iceServers:session.iceServers || [],
-    send:payload => {
-      if (g!==generation || other?.peerId!==target) return Promise.resolve();
-      return api('signal',{target,...payload},{token});
-    },
-    onStream:remote => {
-      if (g!==generation || other?.peerId!==target) return;
-      const video=$('remote-video');
-      video.srcObject=remote;
-      remote.getTracks().forEach(track=>{
-        track.onunmute=showRemoteVideo;
-        track.onmute=showRemoteVideo;
-        track.onended=showRemoteVideo;
-      });
-      showRemoteVideo();
-      video.play().then(()=>{
-        if (video.srcObject===remote) $('play-remote').hidden=true;
-      }).catch(()=>{
-        if (video.srcObject===remote) $('play-remote').hidden=false;
-      });
-    },
-    onState:state=>{
-      if (g!==generation || other?.peerId!==target) return;
-      if (state==='connected') mediaText('Call connected');
-      else if (state==='failed') mediaText('The call could not connect. Rejoin the room to retry.');
-      else if (state==='disconnected') mediaText('Call interrupted. You can still use the whiteboard.');
-      else if (state==='connecting') mediaText('Connecting the call…');
-    },
-    onError:()=>{
-      if (g===generation) mediaText('Call setup was interrupted. Rejoin the room to retry.');
-    },
-  });
-  peer.setStream(sendingStream()).catch(()=>mediaText('Could not connect your audio or video.'));
+  const g=generation, token=session.token;
+  const isCurrent=()=>g===generation && peers.get(target)===remote;
+  const onFailure=()=>{
+    if (!isCurrent()) return;
+    remote.state='failed';
+    reportCallState();
+  };
+  try {
+    remote.connection=new ClassroomPeer({
+      // Every peer pair must choose opposite sides, including two students.
+      polite:session.peerId>target,
+      iceServers:session.iceServers || [],
+      send:async payload=>{
+        if (!isCurrent()) return;
+        try { await api('signal',{target,...payload},{token}); }
+        catch (error) { if (isCurrent() && error.code!=='peer_not_found') throw error; }
+      },
+      onStream:stream=>{
+        if (!isCurrent()) return;
+        remote.stream=stream;
+        const audioTracks=stream.getAudioTracks();
+        if (audioTracks.length && remote.audio?.srcObject?.getAudioTracks()[0]!==audioTracks[0]) {
+          if (!remote.audio) {
+            remote.audio=document.createElement('audio');
+            remote.audio.autoplay=true;
+            $('remote-audio').append(remote.audio);
+          }
+          remote.audio.srcObject=new MediaStream(audioTracks);
+          void playRemoteAudio(remote);
+        }
+        for (const track of stream.getVideoTracks()) {
+          const update=()=>{ if (isCurrent()) showRemoteVideo(); };
+          track.onunmute=update;
+          track.onmute=update;
+          track.onended=update;
+        }
+        showRemoteVideo();
+      },
+      onState:state=>{
+        if (!isCurrent()) return;
+        remote.state=state;
+        reportCallState();
+      },
+      onError:onFailure,
+    });
+    void remote.connection.setStream(sendingStream()).catch(onFailure);
+  } catch { onFailure(); }
+}
+
+function reconcilePeers(list) {
+  // Keep active calls when reconnecting to the room's event stream.
+  const ids=new Set(list.map(person=>person.peerId));
+  for (const id of peers.keys()) if (!ids.has(id)) removePeer(id);
+  for (const person of list) upsertPeer(person);
+  updateRemoteMedia();
+  reportCallState();
 }
 
 function updateMediaButtons() {
@@ -529,11 +722,11 @@ function updateMediaButtons() {
   $('start-media').disabled=capturing.audio;
   $('start-media').hidden=soloPreview || Boolean(microphone);
   $('mute').hidden=!microphone;
-  $('stop-media').hidden=!microphone;
-  $('mute').textContent=micOn?'Mute Mic':'Unmute Mic';
-  $('mute').setAttribute('aria-pressed',String(!micOn));
-  $('camera-toggle').hidden=soloPreview;
-  $('camera-toggle').disabled=soloPreview || capturing.video;
+  $('stop-media').hidden=true;
+  $('mute').textContent='Mute Mic';
+  $('mute').setAttribute('aria-pressed',String(micOn));
+  $('camera-toggle').hidden=true;
+  $('camera-toggle').disabled=true;
   $('camera-toggle').textContent=videoOn?'Turn Off Camera':'Enable Camera';
   $('camera-toggle').setAttribute('aria-pressed',String(videoOn));
   workspace.dataset.localCamera=String(videoOn && !cast.stream);
@@ -556,13 +749,13 @@ async function stopCapture(kind) {
   source?.getTracks().forEach(track=>track.stop());
   updateMediaButtons();
   if (kind==='video') void sendCamera({active:false});
-  await peer?.setStream(sendingStream());
+  return setPeerStreams();
 }
 
 async function startCapture(kind) {
   const isVideo=kind==='video';
   const device=isVideo?'camera':'microphone';
-  if (soloPreview || !session || capturing[kind] || (isVideo?cameraStream:microphone)) return;
+  if (soloPreview || isVideo || !session || capturing[kind] || (isVideo?cameraStream:microphone)) return;
   if (!isSecureContext || !navigator.mediaDevices?.getUserMedia) {
     mediaText('Device access requires localhost or a secure HTTPS page.');
     return;
@@ -592,10 +785,10 @@ async function startCapture(kind) {
     track.addEventListener('ended',()=>{
       if ((isVideo?cameraStream:microphone)===acquired) void stopCapture(kind).catch(()=>{});
     },{once:true});
-    await peer?.setStream(sendingStream());
+    const updated=await setPeerStreams();
     if (g!==generation || (isVideo?cameraStream:microphone)!==acquired) return;
     if (isVideo) void sendCamera({active:true});
-    mediaText(isVideo?'Camera is on':'Microphone is on');
+    mediaText(isVideo?'Camera is on':updated?'Microphone is on':'Microphone is on. Some participants may not hear you.');
   } catch(error) {
     if (g!==generation) return;
     if (acquired && (isVideo?cameraStream:microphone)===acquired) {
@@ -620,27 +813,44 @@ $('camera-toggle').addEventListener('click',()=>{
 });
 $('stop-media').addEventListener('click',()=>void stopCapture('audio').catch(()=>mediaText('Could not update the microphone.')));
 $('mute').addEventListener('click',()=>{
-  microphone?.getAudioTracks().forEach(track=>{track.enabled=!track.enabled;});
-  updateMediaButtons();
+  const g=generation;
+  void stopCapture('audio').then(()=>{
+    if (g===generation && !microphone) mediaText('Microphone is off');
+  }).catch(()=>{ if (g===generation) mediaText('Could not update the microphone.'); });
 });
 $('play-remote').addEventListener('click',()=>{
-  $('remote-video').play().then(()=>{$('play-remote').hidden=true;})
-    .catch(()=>mediaText('Allow audio playback in your browser.'));
+  const g=generation;
+  void Promise.all([...peers.values()].map(playRemoteAudio)).then(results=>{
+    if (g===generation && results.includes(false)) mediaText('Allow audio playback in your browser.');
+  });
 });
 
 function applyEvent(event) {
-  if (event.type==='peer-joined') connectPeer(event.peer || {peerId:event.peerId,role:session.role==='teacher'?'student':'teacher'});
-  else if(event.type==='peer-left' && (event.peer?.peerId || event.peerId)===other?.peerId) {
-    closePeer();
-    roomStatus('Waiting for the other participant');
-    mediaText(microphone || cameraStream ? 'Your devices are still on' : '');
-    updateBoardStatus();
+  if (event.type==='peer-joined') {
+    upsertPeer(event.peer || {peerId:event.peerId,role:session.role==='teacher'?'student':'teacher'});
+    updateRemoteMedia();
   }
-  else if(event.type==='peer-camera' && event.peerId===other?.peerId) {
-    other.cameraActive=event.active;
-    showRemoteVideo();
+  else if(event.type==='peer-left' && removePeer(event.peer?.peerId || event.peerId)) {
+    updateRemoteMedia();
+    if (peers.size) reportCallState();
+    else mediaText(microphone || cameraStream ? 'Your devices are still on' : '');
   }
-  else if(event.type==='signal') { if(event.peerId===other?.peerId) peer?.receive(event); }
+  else if(event.type==='peer-camera') {
+    const remote=peers.get(event.peerId);
+    if (remote) {
+      remote.person.cameraActive=event.active;
+      showRemoteVideo();
+    }
+  }
+  else if(event.type==='peer-avatar') {
+    const remote=peers.get(event.peerId);
+    if (remote) {
+      const {avatar,headYaw,headPitch}=event.peer ?? event;
+      Object.assign(remote.person,{avatar,headYaw,headPitch});
+      updatePresence();
+    }
+  }
+  else if(event.type==='signal') { void peers.get(event.peerId)?.connection?.receive(event); }
   else if(event.type==='board-stroke') { board.accept(event.epoch,event.stroke); render(); }
   else if(event.type==='board-erase' && event.epoch===board.epoch) {
     const erased=new Set(event.erase);
@@ -650,6 +860,11 @@ function applyEvent(event) {
   }
   else if(event.type==='board-chemistry' && event.epoch===board.epoch && !chemistry.some(item=>item.key===event.chemistry.key)) {
     updateChemistry([...chemistry,event.chemistry]);
+  }
+  else if(event.type==='chemistry-pose' && event.epoch===board.epoch) {
+    if (chemistry.some(item=>item.key===event.key)) {
+      updateChemistry(chemistry.map(item=>item.key===event.key?{...item,rotation:event.rotation}:item));
+    }
   }
   else if(event.type==='board-clear') { if(board.clear(event.epoch)) { cancelStroke(); cancelInkSelection(); updateChemistry([]); render(); } }
   else if(event.type==='molecule-state' && session.role==='student') showMolecule(event.molecule);
@@ -665,12 +880,8 @@ function applyEvent(event) {
       showMolecule(event.molecule);
       pointer.show(event.pointer);
       remotePresentation = Boolean(event.presentation?.active);
-      showRemoteVideo();
     }
-    // Recovering board history must not interrupt a healthy call with the same
-    // person. connectPeer replaces media only when the peer identity changes.
-    if(event.peers.length) connectPeer(event.peers[0]);
-    else { closePeer(); roomStatus('Waiting for the other participant'); }
+    reconcilePeers(event.peers);
   }
 }
 async function poll(g) {
@@ -684,18 +895,20 @@ async function poll(g) {
       for(const event of result.events) applyEvent(event);
       const reconnected = !online;
       sequence=result.sequence; online=true; failures=0;
-      if (reconnected) void sendCamera({active:Boolean(cameraStream)});
+      if (reconnected) scheduleChemistryPose(0);
+      if (reconnected) syncAvatar();
+      if (reconnected && cameraStream) void sendCamera({active:true});
       if (reconnected && session.role==='teacher') {
         void sendPointer({active:false,x:0,y:0});
         void sendPresentation({active:Boolean(cast.stream)});
       }
-      roomStatus(other?'Both participants joined':'Waiting for the other participant'); updateBoardStatus();
+      updateRoomOccupancy(); updateBoardStatus();
     } catch(e) {
       if(g!==generation) return;
       if(e.code==='session_expired') { await leave(message(e)); return; }
       online=false; cancelStroke(); setPointerMode(false); pointer.show(null);
       failures++; roomStatus('Reconnecting…'); updateBoardStatus();
-      if(failures>=7) { await leave('The connection could not recover. Check the local server and rejoin.'); return; }
+      if(failures>=7) { await leave('The connection could not recover. Reopen the invitation and rejoin.'); return; }
       await new Promise(resolve=>setTimeout(resolve,Math.min(500*2**failures,5000)));
     } finally { clearTimeout(timeout); }
   }
@@ -704,14 +917,18 @@ async function leave(note='',unloading=false) {
   if (leaving) return;
   leaving=true;
   const previous=session, g=++generation; session=null; online=false; joining=false; pollController?.abort(); cancelStroke();
+  activeAvatar='simple'; trackedHead=null; renderAvatarChoice();
   modelDrag=null;
+  pendingPoses.clear(); clearTimeout(poseTimer); poseTimer=null;
   cast.stop(); remotePresentation=false; boardDuringPresentation=false;
   setPointerMode(false); pointer.show(null); confirmedMolecule=null; showMolecule(null);
   // Release the role before allowing a new join. On pagehide, start keepalive
   // immediately, before an awaited device cleanup can yield to page teardown.
   let released=true;
   const release=previous ? api('leave',{}, {token:previous.token,keepalive:unloading}).catch(()=>{released=false;}) : Promise.resolve();
-  closePeer();
+  for (const id of peers.keys()) removePeer(id);
+  updateRemoteMedia();
+  for (const dialog of [$('share-dialog'),$('host-dialog')]) if (dialog.open) dialog.close();
   for (const source of [microphone,cameraStream]) source?.getTracks().forEach(track=>track.stop());
   microphone=null; cameraStream=null; capturing.audio=false; capturing.video=false;
   pendingWrites=0; uploadQueue=Promise.resolve(); clearBusy=false;
@@ -735,6 +952,7 @@ function setJoinBusy(busy) {
   $('open-appointment').disabled=busy;
   $('appointment-open').disabled=busy;
   $('choose-live').disabled=busy;
+  $('host-form').querySelector('[type="submit"]').disabled=busy;
 }
 
 function joinStatus(note) {
@@ -744,7 +962,7 @@ function joinStatus(note) {
 
 $('choose-live').addEventListener('click', () => {
   lobbyDialog.showModal();
-  joinStatus('');
+  joinStatus(configurationError);
 });
 $('close-entry').addEventListener('click', () => lobbyDialog.close());
 lobbyDialog.addEventListener('cancel', event => {
@@ -752,67 +970,114 @@ lobbyDialog.addEventListener('cancel', event => {
 });
 $('room-title').addEventListener('click', async () => {
   if (!session) return;
-  try { await navigator.clipboard.writeText(session.code); roomStatus('Room code copied'); }
-  catch { roomStatus('Copy the room code manually'); }
+  const code=session.code;
+  try { await navigator.clipboard.writeText(code); if (session?.code===code) mediaText('Room code copied'); }
+  catch { if (session?.code===code) void shareInvitation(appointments.invitationFor(code)); }
 });
 $('join-form').addEventListener('submit', event => {
   event.preventDefault();
   const code=$('room-code').value.trim().toUpperCase();
-  void joinRoom(code===hostedCode?'teacher':'student',code);
+  void (code===hostedCode?openTeacherRoom(code):joinRoom('student',code));
 });
-$('create-room').addEventListener('click', () => void joinRoom('teacher',newRoomCode()));
+$('create-room').addEventListener('click', () => void openTeacherRoom(newRoomCode()));
 
-async function joinRoom(role, code) {
+async function openTeacherRoom(code) {
+  if (checkingEntry || joining || leaving || session) return;
+  if (soloPreview) return joinRoom('teacher',code);
+  checkingEntry=true; setJoinBusy(true);
+  let config;
+  try { config=await api('config'); }
+  catch(error) { joinStatus(message(error)); return; }
+  finally { checkingEntry=false; setJoinBusy(false); }
+  if (!config.hostKeyRequired) return joinRoom('teacher',code);
+  hostFormCode=code;
+  if (lobbyDialog.open) lobbyDialog.close();
+  $('host-feedback').textContent='';
+  $('host-dialog').showModal();
+  $('host-key').focus();
+}
+$('close-host').addEventListener('click',()=>{if (!joining) $('host-dialog').close();});
+$('host-dialog').addEventListener('cancel',event=>{if (joining) event.preventDefault();});
+$('host-dialog').addEventListener('close',()=>{hostFormCode=null; $('host-key').value='';});
+$('host-form').addEventListener('submit',event=>{
+  event.preventDefault();
+  if (!hostFormCode || joining) return;
+  const hostKey=$('host-key').value;
+  $('host-key').value='';
+  $('host-feedback').textContent='Opening the classroom…';
+  void joinRoom('teacher',hostFormCode,hostKey);
+});
+
+async function joinRoom(role, code, hostKey) {
   if(joining||leaving||session) return;
   if (soloPreview) role='teacher';
   joining=true; const g=++generation; setJoinBusy(true); joinStatus('Opening the classroom…');
   try {
-    const joined=await api('join',{code,role});
+    const joined=await api('join',{code,role,...(hostKey?{hostKey}:{})});
     if(g!==generation) { api('leave',{}, {token:joined.token}).catch(()=>{}); return; }
     session={...joined,role,code}; sequence=joined.sequence; online=true; board.reset(joined.epoch,joined.board); updateChemistry(joined.chemistry || []);
+    activeAvatar=preferredAvatar(role) ?? 'simple'; trackedHead=null;
+    renderAvatarChoice();
+    if (activeAvatar!=='simple') syncAvatar();
     if (role==='teacher') hostedCode=code;
+    if (!soloPreview && role==='student') {
+      const returnURL=new URL(window.location.href);
+      returnURL.searchParams.set('room',code);
+      try { history.replaceState(null,'',returnURL); } catch { /* The room still works in embedded browsers. */ }
+    }
     $('room-code').value=code;
     lobbyDialog.close();
+    if ($('host-dialog').open) $('host-dialog').close();
     joinStatus('');
     $('lobby').hidden=true; $('room').hidden=false; $('room-title').textContent=code;
     document.body.dataset.station='classroom';
     document.title='Classroom · Boundless Classroom';
     $('room-title').setAttribute('aria-label',`Copy room code ${code}`);
     $('room-header').hidden=false; $('preview-label').hidden=true;
+    $('share-room').hidden=role!=='teacher';
     $('teacher-tools').hidden=role!=='teacher'; workspace.dataset.role=role;
+    updatePresence();
     confirmedMolecule=joined.molecule;
     showMolecule(joined.molecule);
     pointer.show(joined.pointer);
     remotePresentation=Boolean(joined.presentation?.active);
     updateProjection();
     $('self-caption').textContent=role==='teacher'?'You · Teacher':'You · Student'; $('remote-caption').textContent=role==='teacher'?'Student':'Teacher';
-    mediaText(''); updateMediaButtons(); roomStatus('Waiting for a participant'); updateBoardStatus(); render();
-    if(joined.peers.length) connectPeer(joined.peers[0]);
+    mediaText(''); updateMediaButtons(); reconcilePeers(joined.peers); updateRoomOccupancy(); updateBoardStatus(); render();
     window.scrollTo(0,0);
     $('room').focus({preventScroll:true});
     if (!soloPreview) poll(g);
-  } catch(error) { if(g===generation) joinStatus(message(error)); }
+  } catch(error) {
+    if (g!==generation) return;
+    if ($('host-dialog').open) { $('host-feedback').textContent=message(error); $('host-key').focus(); }
+    else joinStatus(message(error));
+  }
   finally { if(g===generation) { joining=false; setJoinBusy(false); } }
 }
 
 const shareInvitation = mountRoomInvitation({
+  live:Boolean(roomService),
+  configurationError,
   onStatus:note => session ? roomStatus(note) : joinStatus(note),
 });
 const appointments = mountAppointment({
   newRoomCode,
-  onOpenRoom:code => joinRoom('teacher',code),
+  onOpenRoom:openTeacherRoom,
   onStatus:joinStatus,
   onShare:shareInvitation,
 });
 $('share-room').addEventListener('click', () => {
-  if (session) void shareInvitation(appointments.invitationFor(session.code));
+  if (session?.role==='teacher') void shareInvitation(appointments.invitationFor(session.code));
 });
 
 const invitedCode = roomCodeFromURL(window.location.href);
 if (invitedCode) {
   $('room-code').value = invitedCode;
   lobbyDialog.showModal();
-  joinStatus(soloPreview ? 'This link opens your own preview. Live sessions are not connected.' : 'Invitation ready. Join as a student when the teacher has opened the room.');
+  joinStatus(configurationError || (soloPreview ? 'This link opens your own preview. Live sessions are not connected.' :
+    'Invitation ready. Join as a student when the teacher has opened the room.'));
+} else if (configurationError) {
+  joinStatus(configurationError);
 }
 
 if (soloPreview) {

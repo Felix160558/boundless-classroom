@@ -1,5 +1,7 @@
 import * as THREE from '../three.module.min.js';
 import {createMoleculeStage} from '../molecule-lesson.js?v=reservation-room-36';
+import {seatPose,SHARED_SEATS,SHARED_FLOOR,FURNITURE_INSET} from './shared-seating.js?v=trio-classroom-50';
+import {createClassroomChair} from './classroom-chair.js?v=student-avatar-49';
 
 export const BOARD_DEPTH = 4.8;
 
@@ -24,6 +26,10 @@ export function createStationCabin(scene, {board, localVideo, remoteVideo, proje
     glow:new THREE.MeshStandardMaterial({color:0xeeeadc,emissive:0xd5d9d5,emissiveIntensity:.65,roughness:.5}),
   };
   const frameMaterial = new THREE.MeshStandardMaterial({color:0xc5c2b9,emissive:0xe2ceb0,emissiveIntensity:.11,roughness:.25,metalness:.65});
+  const trialPalette = {
+    frame:new THREE.Color(0xcbd3db), frameGlow:new THREE.Color(0xa6c3de), deck:new THREE.Color(0xc4cbd0),
+    wallGlow:new THREE.Color(0xd5e4f1), ring:new THREE.Color(0xbadbf5), white:new THREE.Color(0xedf0ef),
+  };
   const desktopMaterial = new THREE.MeshPhysicalMaterial({color:0xc9c9b7,roughness:.43,clearcoat:.25,clearcoatRoughness:.32});
   const platformMaterial = new THREE.MeshStandardMaterial({color:0x343d48,roughness:.43,metalness:.58});
   const glass = new THREE.MeshPhysicalMaterial({color:0xc4d2e1,transparent:true,opacity:.045,roughness:.08,metalness:.08,clearcoat:1,clearcoatRoughness:.08,side:THREE.DoubleSide,depthWrite:false});
@@ -130,8 +136,8 @@ export function createStationCabin(scene, {board, localVideo, remoteVideo, proje
     for (const geometry of geometries) geometry.dispose();
   }
 
-  function addFurniture(baseY) {
-    // One desk, one chair. No additional dashboard or classroom clutter.
+  function addFurniture(baseY,shared) {
+    // Keep the original desk and rounded chair geometry in both layouts.
     const table=new THREE.Group();table.position.set(0,baseY,-.96);structure.add(table);
     const desktopShape=new THREE.Shape(),w=.925,d=.455,r=.055;
     desktopShape.moveTo(-w+r,-d);desktopShape.lineTo(w-r,-d);desktopShape.quadraticCurveTo(w,-d,w,-d+r);
@@ -141,66 +147,18 @@ export function createStationCabin(scene, {board, localVideo, remoteVideo, proje
     desktopGeometry.rotateX(-Math.PI/2);desktopGeometry.translate(0,.91,0);
     mesh(desktopGeometry,desktopMaterial,table);
     for(const x of [-.76,.76])for(const z of [-.32,.32])furnitureBox(.04,.82,.04,materials.edge,x,.49,z,table);
-    const chair=new THREE.Group();chair.position.set(0,baseY,0);structure.add(chair);
-    // One closed, mirrored surface per panel. Shared rings and analytic normals
-    // keep the flat faces and rounded edges continuous at every corner.
-    function roundedChairPanel(width,height,thickness,radius,bevel){
-      const cornerSegments=32,edgeSegments=24,perimeter=[],quarter=[];
-      const cx=width/2-radius,cy=height/2-radius,halfDepth=thickness/2;
-      // Reuse one quadrant's samples with exact sign changes. The tangent ends
-      // are explicit 0/1 values, without duplicate arc/line junction vertices.
-      for(let i=0;i<=cornerSegments;i++){
-        const angle=i/cornerSegments*Math.PI/2;
-        const c=i===cornerSegments?0:Math.cos(angle),s=i===0?0:Math.sin(angle);
-        quarter.push([c,s]);
+    const chair=createClassroomChair(materials);
+    if (shared) {
+      for (const seatId of SHARED_SEATS) {
+        const {x,z,yaw}=seatPose(seatId);
+        const instance=chair.clone();
+        instance.position.set(x,baseY,z);
+        instance.rotation.y=yaw;
+        structure.add(instance);
       }
-      for(let quadrant=0;quadrant<4;quadrant++)for(let i=0;i<=cornerSegments;i++){
-        const [c,s]=quarter[quadrant%2===0?i:cornerSegments-i];
-        if(quadrant===0)perimeter.push([cx,cy,c,s]);
-        if(quadrant===1)perimeter.push([-cx,cy,-c,s]);
-        if(quadrant===2)perimeter.push([-cx,-cy,-c,-s]);
-        if(quadrant===3)perimeter.push([cx,-cy,c,-s]);
-      }
-      const positions=[],normals=[],indices=[],stride=perimeter.length;
-      function addRing(sine,cosine,side){
-        const r=radius-bevel+bevel*sine,z=side*(halfDepth-bevel+bevel*cosine);
-        for(const [x,y,nx,ny] of perimeter){
-          positions.push(x+nx*r,y+ny*r,z);
-          normals.push(nx*sine,ny*sine,side*cosine);
-        }
-      }
-      function edgeRing(i,side){
-        const angle=i/edgeSegments*Math.PI/2;
-        addRing(i===edgeSegments?1:Math.sin(angle),i===edgeSegments?0:Math.cos(angle),side);
-      }
-      for(let i=0;i<=edgeSegments;i++)edgeRing(i,1);
-      for(let i=edgeSegments;i>=0;i--)edgeRing(i,-1);
-      const ringCount=positions.length/(stride*3);
-      for(let ring=0;ring<ringCount-1;ring++)for(let i=0;i<stride;i++){
-        const next=(i+1)%stride,a=ring*stride+i,b=a+stride,c=ring*stride+next,d=c+stride;
-        indices.push(a,b,c,c,b,d);
-      }
-      const frontCenter=positions.length/3,backCenter=frontCenter+1,lastRing=(ringCount-1)*stride;
-      positions.push(0,0,halfDepth,0,0,-halfDepth);normals.push(0,0,1,0,0,-1);
-      for(let i=0;i<stride;i++){
-        const next=(i+1)%stride;
-        indices.push(frontCenter,i,next,backCenter,lastRing+next,lastRing+i);
-      }
-      const geometry=new THREE.BufferGeometry();
-      geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
-      geometry.setAttribute('normal',new THREE.Float32BufferAttribute(normals,3));
-      geometry.setIndex(indices);return geometry;
-    }
-    const seatGeometry=roundedChairPanel(.62,.62,.09,.11,.017);
-    seatGeometry.rotateX(-Math.PI/2);
-    mesh(seatGeometry,materials.dark,chair,0,.58,0);
-    mesh(roundedChairPanel(.61,.62,.065,.13,.014),materials.white,chair,0,.95,.29);
-    // Rounded tubes soften the supports too; rear posts continue into the backrest.
-    const frontLeg=new THREE.CapsuleGeometry(.018,.444,12,32);
-    const rearLeg=new THREE.CapsuleGeometry(.018,.934,12,32);
-    for(const x of [-.25,.25]){
-      mesh(frontLeg,materials.edge,chair,x,.31,-.24);
-      mesh(rearLeg,materials.edge,chair,x,.555,.30);
+    } else {
+      chair.position.set(0,baseY,0);
+      structure.add(chair);
     }
   }
 
@@ -222,7 +180,7 @@ export function createStationCabin(scene, {board, localVideo, remoteVideo, proje
     return {side,mount,picture,width,height};
   }
 
-  function layout(camera, viewWidth, viewHeight, rect, inClassroom) {
+  function layout(camera, viewWidth, viewHeight, rect, inClassroom, sharedBoard=null) {
     classroom=Boolean(inClassroom);
     group.visible=classroom;
     if (!classroom) {
@@ -232,22 +190,32 @@ export function createStationCabin(scene, {board, localVideo, remoteVideo, proje
     }
     disposeGroup(structure);
     disposeGroup(teaching,[models.group,hand]);
+    frameMaterial.color.set(sharedBoard?trialPalette.frame:0xc5c2b9);
+    frameMaterial.emissive.set(sharedBoard?trialPalette.frameGlow:0xe2ceb0);
+    materials.deck.color.set(sharedBoard?trialPalette.deck:0xc5c7c3);
+    materials.glow.emissive.set(sharedBoard?trialPalette.wallGlow:0xd5d9d5);
+    rimMaterial.color.set(sharedBoard?trialPalette.ring:0xffdfb7);
+    ringMaterials[0].color.set(sharedBoard?trialPalette.ring:0xffe1b9);
+    haloMaterial.color.set(sharedBoard?trialPalette.ring:0xe1c6a1);
+    boardFace.color.set(sharedBoard?trialPalette.white:0xe6e7df);
+    key.color.set(sharedBoard?0xe3efff:0xfff3e1);
+    lamp.color.set(sharedBoard?0xdceaff:0xfff3db);
     // Keep the interactive canvas and its physical face on the same ray plane.
     // The scene camera stays at the seated eye (0,0,0), looking along -Z.
     const vertical = 2*Math.tan(THREE.MathUtils.degToRad(camera.fov*.5))*BOARD_DEPTH;
     const units = vertical/Math.max(viewHeight,1);
     const hasRect = rect?.width>0 && rect?.height>0;
-    const boardWidth = hasRect ? rect.width*units : 4.45;
-    const boardHeight = hasRect ? rect.height*units : 2.46;
-    const boardX = hasRect ? (rect.left+rect.width*.5-viewWidth*.5)*units : -.8;
-    const boardY = hasRect ? (viewHeight*.5-rect.top-rect.height*.5)*units : .70;
-    const floorY = Math.min(-1.38,boardY-boardHeight*.5-.17);
-    const baseY = floorY-.09;
+    const boardWidth = sharedBoard?.width ?? (hasRect ? rect.width*units : 4.45);
+    const boardHeight = sharedBoard?.height ?? (hasRect ? rect.height*units : 2.46);
+    const boardX = sharedBoard?.x ?? (hasRect ? (rect.left+rect.width*.5-viewWidth*.5)*units : -.8);
+    const boardY = sharedBoard?.y ?? (hasRect ? (viewHeight*.5-rect.top-rect.height*.5)*units : .70);
+    const floorY = sharedBoard?SHARED_FLOOR:Math.min(-1.38,boardY-boardHeight*.5-.17);
+    const baseY = floorY-FURNITURE_INSET;
     const roomX = boardX;
     const halfWidth = Math.max(4.45,boardWidth*.5+1.12,Math.abs(roomX)+1.6);
     const top = Math.max(baseY+3.86,boardY+boardHeight*.5+.38);
     const frontZ = -5.36;
-    const rearZ = 1.24;
+    const rearZ = sharedBoard?1.85:1.24;
     const length = rearZ-frontZ;
     const midZ = (frontZ+rearZ)*.5;
     const height = top-floorY;
@@ -286,7 +254,7 @@ export function createStationCabin(scene, {board, localVideo, remoteVideo, proje
     pane(halfWidth*2,length,roomX,top,midZ,Math.PI/2);
     for(const z of [frontZ,rearZ])box(structure,frameMaterial,roomX,top+.01,z,halfWidth*2+.05,.055,.055);
     box(structure,materials.glow,roomX,top-.05,frontZ+.04,halfWidth*2-1,.028,.038);
-    addFurniture(baseY);
+    addFurniture(baseY,Boolean(sharedBoard));
 
     key.position.set(roomX-3,baseY+9,midZ+5);
     key.target.position.set(roomX,baseY,midZ);

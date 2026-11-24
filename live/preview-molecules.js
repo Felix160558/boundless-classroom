@@ -4,7 +4,7 @@ import {createMoleculeStage} from '../molecule-lesson.js?v=reservation-room-36';
 
 export const MAX_PREVIEW_MOLECULES = 4;
 
-export function createPreviewMolecules(parent, {rig}) {
+export function createPreviewMolecules(parent, {rig,onPose=()=>{},canRotate=()=>true}) {
   const display = new THREE.Group();
   display.name = 'Whiteboard molecular display';
   display.visible = false;
@@ -32,13 +32,13 @@ export function createPreviewMolecules(parent, {rig}) {
     display.visible = Boolean(surface && models.size);
     if (!display.visible) return;
     const {x,y,width,height,z} = surface;
-    const immersive = Boolean(session);
+    const immersive = Boolean(session) && !surface.shared;
     const count = models.size;
     // In the headset the same display sits above the learner's desk, in
     // arm's reach. In the browser it sits nearer the lower half of the board.
-    const centerX = immersive ? 0 : x*(1-.80/-z);
-    const centerY = immersive ? -.23 : y-height*.28;
-    const centerZ = immersive ? -.63 : z+.80;
+    const centerX = surface.shared ? 0 : immersive ? 0 : x*(1-.80/-z);
+    const centerY = surface.shared ? -.22 : immersive ? -.23 : y-height*.28;
+    const centerZ = surface.shared ? -2.70 : immersive ? -.63 : z+.80;
     const targetRadius = immersive ? (count>2 ? .078 : .115) : Math.min(count>2?.30:.46,height*.19,width/(count*2.7));
     const stride = immersive ? (count>2?.175:.255) : Math.min(.99,width*.80/count);
     let index = 0;
@@ -87,11 +87,11 @@ export function createPreviewMolecules(parent, {rig}) {
     for (const item of Array.isArray(next)?next:[]) {
       if (requested.size>=MAX_PREVIEW_MOLECULES) break;
       if (typeof item?.key !== 'string' || typeof item.id !== 'string' || !Object.hasOwn(MOLECULE_CATALOG,item.id)) continue;
-      requested.set(item.key,item.id);
+      requested.set(item.key,item);
     }
     const retained = new Map();
     for (const [key,entry] of models) {
-      if (requested.get(key)===entry.id) retained.set(key,entry);
+      if (requested.get(key)?.id===entry.id) retained.set(key,entry);
       else {
         if (entry.heldBy) release(entry.heldBy);
         entry.stage.dispose();
@@ -99,7 +99,14 @@ export function createPreviewMolecules(parent, {rig}) {
       }
     }
     models.clear();
-    for (const [key,id] of requested) models.set(key,retained.get(key)||build(id));
+    for (const [key,item] of requested) {
+      const entry=retained.get(key)||build(item.id);
+      if (item.rotation && (!canRotate() || !retained.has(key))) {
+        entry.target.fromArray(item.rotation).normalize();
+        if (!retained.has(key)) entry.holder.quaternion.copy(entry.target);
+      }
+      models.set(key,entry);
+    }
     layout(surface);
   }
 
@@ -111,9 +118,15 @@ export function createPreviewMolecules(parent, {rig}) {
 
   function rotate(key,dx,dy) {
     const entry = models.get(key);
-    if (!entry || !Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    if (!canRotate() || !entry || !Number.isFinite(dx) || !Number.isFinite(dy)) return;
     entry.target.premultiply(rotation.setFromAxisAngle(yAxis,THREE.MathUtils.clamp(dx,-.55,.55)));
     entry.target.premultiply(rotation.setFromAxisAngle(xAxis,THREE.MathUtils.clamp(dy,-.55,.55))).normalize();
+    onPose(key,entry.target.toArray());
+  }
+
+  function finish(key) {
+    const entry=models.get(key);
+    if (entry && canRotate()) onPose(key,entry.target.toArray(),true);
   }
 
   function update(seconds,delta) {
@@ -147,6 +160,8 @@ export function createPreviewMolecules(parent, {rig}) {
 
   function release(state) {
     if (!state.holding) return;
+    const held=state.holding;
+    for (const [key,entry] of models) if (entry===held) { finish(key); break; }
     state.holding.heldBy = null;
     state.holding = null;
   }
@@ -226,11 +241,15 @@ export function createPreviewMolecules(parent, {rig}) {
         state.offset.copy(wristRotation).invert().multiply(entry.holder.quaternion);
       }
     }
-    if (state.holding) state.holding.target.copy(wristRotation).multiply(state.offset);
+    if (state.holding) {
+      const held=state.holding;
+      held.target.copy(wristRotation).multiply(state.offset).normalize();
+      for (const [key,entry] of models) if (entry===held) { onPose(key,held.target.toArray()); break; }
+    }
   }
 
   function updateXR(frame,referenceSpace) {
-    if (!session || !display.visible || !frame || !referenceSpace) return;
+    if (!session || !display.visible || !frame || !referenceSpace || !canRotate()) return;
     rig.updateWorldMatrix(true,false);
     display.updateWorldMatrix(true,false);
     referenceToDisplay.copy(display.matrixWorld).invert().multiply(rig.matrixWorld);
@@ -291,5 +310,5 @@ export function createPreviewMolecules(parent, {rig}) {
     display.removeFromParent();
   }
 
-  return {layout,setModels,hitTest,rotate,update,attachXR,updateXR,dispose};
+  return {layout,setModels,hitTest,rotate,finish,update,attachXR,updateXR,dispose};
 }

@@ -53,6 +53,24 @@ a { color: inherit; text-decoration: none; }
 #avatar-preview:hover, #station-vr:hover, #station-vr[aria-pressed="true"], #leave:hover {
   border-color: #c0ccdb71; background: #242d3a96;
 }
+.avatar-menu { position: relative; }
+.avatar-menu summary {
+  list-style: none; cursor: pointer; padding: 9px 10px; border: 1px solid transparent;
+  border-radius: 5px; color: #cdd8e4; font-size: 11px;
+}
+.avatar-menu summary::-webkit-details-marker { display: none; }
+.avatar-menu summary:hover, .avatar-menu[open] summary {
+  border-color: #b7cde745; background: #17222f88;
+}
+.avatar-options {
+  position: absolute; top: calc(100% + 8px); right: 0; width: 166px; display: grid; gap: 3px;
+  padding: 6px; border: 1px solid #b7cde743; border-radius: 9px;
+  background: #111923f4; box-shadow: 0 12px 32px #04070e80;
+}
+.avatar-options > * { text-align: left; padding: 8px 10px; border-radius: 5px; font-size: 12px; }
+.avatar-options > *:hover { background: #b1c9e21a; }
+.avatar-options [aria-pressed="true"] { color: #f2d6ad; background: #cda7751a; }
+.avatar-options a { color: #aebdcd; font-size: 10px; }
 
 .lounge {
   position: relative; min-height: calc(100svh - var(--header));
@@ -100,6 +118,7 @@ a { color: inherit; text-decoration: none; }
 body[data-station="lounge"] .topbar { background: linear-gradient(#130e09b0,transparent); }
 body[data-station="lounge"] .brand { color: #e7dbc7; }
 body[data-station="lounge"] .preview-label { color: #c6b696; font-size: 9px; letter-spacing: .22em; }
+body[data-station="classroom"] #avatar-preview { display: none; }
 body[data-station="lounge"] #avatar-preview,
 body[data-station="lounge"] #station-vr,
 body[data-station="lounge"] #leave { background: #32291c26; border-color: #e0c69930; color: #e4d5bd; }
@@ -366,17 +385,9 @@ body[data-station-rendered="true"] .workspace.is-looking { cursor: grabbing; }
 .teacher-profile { padding: 46px 30px; }
 .teacher-profile h2 { font-size: 29px; margin: 0; }
 #teacher-biography { min-height: 210px; }
-#share-link {
-  display: block; width: 100%; min-width: 0; padding: 13px 11px;
-  border: 1px solid #c6b79550; border-radius: 4px; background: #0809075c;
-  color: #f0e4cd; font: 12px/1.5 system-ui, sans-serif; margin: 20px 0 12px;
-}
-#share-details { font-size: 13px; line-height: 1.7; color: #d8cbb7; white-space: pre-line; }
-#share-feedback { font-size: 11px; line-height: 1.6; color: #bcb09c; margin: 15px 0 0; }
-#share-dialog .primary { width: 100%; font-size: 12px; }
 @media (max-width: 410px) {
   #center-station { font-size: 9px; padding: 5px; }
-  #avatar-preview, #station-vr, #leave { font-size: 9px; padding: 8px 6px; }
+  #avatar-preview, #station-vr, #leave, .avatar-menu summary { font-size: 9px; padding: 8px 6px; }
   .topbar { gap: 6px; padding-inline: 12px; }
   .teacher-profile { padding: 42px 18px; }
   .teacher-image { min-height: 290px; }
@@ -402,3 +413,42 @@ body[data-station-rendered="true"] .workspace.is-looking { cursor: grabbing; }
 .ink-actions button { padding: 8px 12px; }
 .workspace[data-eraser="true"] #board,
 body[data-station-rendered="true"] .workspace[data-eraser="true"][data-cursor="board"] { cursor: cell; }
+
+#share-dialog, #host-dialog {
+  width: min(400px, calc(100% - 32px));
+  padding: clamp(22px, 5vw, 36px);
+  border-radius: 12px;
+  border-color: #c0d2e038;
+  background: linear-gradient(140deg,#20242de8,#131924ed);
+  box-shadow: 0 24px 80px #0009;
+}
+.invite-kicker { margin: 0 0 12px; color: #b8c5d4; letter-spacing: .19em; text-transform: uppercase; font-size: .67rem; }
+#share-dialog h2, #host-dialog h2 { margin: 0 0 10px; font-size: 2rem; }
+#share-details, #host-form label { margin: 0 0 14px; font-size: .875rem; color: #b8c2cd; }
+#share-details { white-space: pre-line; line-height: 1.6; }
+#share-code, #share-link, #host-key {
+  box-sizing: border-box; width: 100%; min-height: 40px;
+  background: #080b135f; color: #e5eef6; border: 1px solid #bccee13b;
+  border-radius: 6px; padding: 9px 11px;
+}
+#share-code { font: 600 1.2rem/1.3 ui-monospace, monospace; letter-spacing: .19em; }
+#share-link { display: block; min-width: 0; margin: 7px 0 15px; font-size: .78rem; }
+#share-dialog .primary, #host-dialog .primary { width: 100%; font-size: .82rem; background: #d8e4ed; }
+#share-dialog .primary:hover, #host-dialog .primary:hover { background: #f0f6fa; }
+#share-feedback, #host-feedback { margin: 10px 0 0; color: #c9d2db; font-size: .8rem; }
+#share-feedback:empty, #host-feedback:empty { display: none; }
+#host-form { display: grid; gap: 10px; }
+#host-form label { margin: 0; }
+#share-room { color: #e9deca; border: 1px solid #d6c6aa36; border-radius: 6px; padding-inline: 9px; }
+#share-room:hover { border-color: #d6c6aa85; background: #e9deca0d; }
+body[data-station="classroom"] #share-room,
+body[data-station="classroom"] #room-title { color: #dbe6f0; }
+body[data-station="classroom"] #share-room { border-color: #b7cde73d; }
+body[data-station="classroom"] #share-room:hover { border-color: #b7cde780; background: #c6d8ed10; }
+body[data-station="classroom"] .room-dock { background: linear-gradient(0deg, #080d16c4, transparent); }
+body[data-station="classroom"] .room-controls #start-media,
+body[data-station="classroom"] .room-controls #mute { color: #e1ebf3; border-color: #b8d0e944; }
+.workspace[data-room-role] + .room-dock .room-controls { gap: 8px; }
+.workspace[data-room-role] + .room-dock .room-controls > button,
+.workspace[data-room-role] + .room-dock .tool-menu summary { border-radius: 6px; }
+.workspace[data-room-role] + .room-dock #cast-toggle { color: #aab8c7; }

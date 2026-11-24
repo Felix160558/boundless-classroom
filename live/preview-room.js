@@ -12,6 +12,20 @@ const validIds = values => Array.isArray(values) && values.length >= 1 && values
   values.every(validId) && new Set(values).size === values.length;
 const operations = ['stroke','clear','erase','chemistry'];
 
+// Null angles release the tracked pose so rendering can return to its idle motion.
+export function avatarState(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data) ||
+      !Object.keys(data).every(key => ['avatar', 'headYaw', 'headPitch'].includes(key)) ||
+      !['simple', 'orange-cat'].includes(data.avatar)) return null;
+  const {avatar, headYaw = null, headPitch = null} = data;
+  if (headYaw === null && headPitch === null) return {avatar, headYaw, headPitch};
+  if (!Number.isFinite(headYaw) || !Number.isFinite(headPitch)) return null;
+  return {
+    avatar, headYaw: Math.max(-0.9, Math.min(0.9, headYaw)),
+    headPitch: Math.max(-0.55, Math.min(0.55, headPitch)),
+  };
+}
+
 // The local room server and the static preview apply the same board protocol.
 export function boardOperation(data) {
   if (!data || typeof data!=='object' || !Number.isSafeInteger(data.epoch)) return null;
@@ -61,6 +75,11 @@ export function createPreviewRoom({onEvent = () => {}} = {}) {
       }
       if (!token || provided !== token) fail('session_expired');
       if (path === 'leave') { token = null; reset(); return {ok:true}; }
+      if (path === 'avatar') {
+        const state = avatarState(body);
+        if (!state) fail('invalid_avatar');
+        return {ok:true,...state};
+      }
       if (path === 'board') {
         const operation = boardOperation(body);
         if (!operation) fail('invalid_board');
