@@ -5,6 +5,7 @@ import {teacher} from './teacher-client.js?v=quiet-input-33';
 import {createTeacherVoice} from './teacher-voice.js?v=quiet-shape-31';
 import {renderTeacherReply,lessonNotes} from './teacher-content.js?v=gentle-board-13';
 import {createAttachments,appendAttachmentImages} from './attachments.js?v=quiet-input-33';
+import {avatarPreference} from './live/avatar-preference.js?v=block-vr-56';
 
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 let space=null,topic='free',pending=false,voice=false,currentMode='home',xrSupported=false;
@@ -46,6 +47,25 @@ function syncBoard(){
   else space?.setBoard('Stay curious.',currentMode==='vr'?'The universe is your classroom.':'Every question is a beginning.');
 }
 const defaultSceneDescription=$('#universe').getAttribute('aria-label');
+const studentAvatarMenu=$('#student-avatar-menu');
+const studentAvatarButtons=[...studentAvatarMenu.querySelectorAll('[data-avatar]')];
+function showStudentAvatarChoice(){
+  for(const button of studentAvatarButtons){
+    const avatar=button.dataset.avatar;
+    button.setAttribute('aria-pressed',String(avatar===avatarPreference.current));
+    if(avatar==='orange-cat')button.textContent=avatarPreference.unlocked?'橘猫学生':'解锁橘猫学生';
+  }
+}
+showStudentAvatarChoice();
+avatarPreference.subscribe(showStudentAvatarChoice);
+for(const button of studentAvatarButtons)button.addEventListener('click',()=>{
+  avatarPreference.select(button.dataset.avatar);
+  studentAvatarMenu.open=false;
+  $('#universe').focus({preventScroll:true});
+});
+document.addEventListener('pointerdown',event=>{
+  if(studentAvatarMenu.open&&!studentAvatarMenu.contains(event.target))studentAvatarMenu.open=false;
+});
 function toast(message){const el=$('#toast');el.textContent=message;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),4000);}
 function updateMode(){
   const next=location.hash.slice(1);
@@ -60,8 +80,10 @@ function updateMode(){
   $('#back-home').hidden=currentMode==='home';
   $('#enter-vr').hidden=currentMode==='vr';
   $('#immersive-btn').hidden=currentMode!=='vr';
+  studentAvatarMenu.hidden=currentMode!=='vr';
+  if(studentAvatarMenu.hidden)studentAvatarMenu.open=false;
   space?.setMode(currentMode);
-  $('#universe').setAttribute('aria-label',currentMode==='vr'?'你坐在课桌前，面前是猫老师与白板，左右和头顶是通向星空的玻璃。拖动或使用方向键环视。':defaultSceneDescription);
+  $('#universe').setAttribute('aria-label',currentMode==='vr'?'你坐在课桌前，面前是猫老师与白板。拖动或使用方向键环视，低头可以看见自己的身体和双手。':defaultSceneDescription);
   $('#back-home').lastChild.textContent=currentMode==='vr'?' 离开教室':' 返回太空';
   syncMolecularScene();
   syncBoard();
@@ -431,7 +453,11 @@ $('#immersive-btn').addEventListener('click',async()=>{
 });
 document.addEventListener('fullscreenchange',()=>{if(!xrSupported)$('#immersive-btn').innerHTML=document.fullscreenElement?'退出全屏 ⤢':'全屏 ⤢';});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){dictation?.cancel();cancelReadAloud();}syncTeacherLearningState();});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('dialog[open]')&&currentMode!=='home'&&!document.fullscreenElement)navigate('home');});
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape')return;
+  if(studentAvatarMenu.open){studentAvatarMenu.open=false;studentAvatarMenu.querySelector('summary').focus();return;}
+  if(!$('dialog[open]')&&currentMode!=='home'&&!document.fullscreenElement)navigate('home');
+});
 
 function fallback(message){
   document.body.classList.add('fallback');$('#scene-loading').hidden=true;$('#fallback-note').hidden=false;
@@ -440,7 +466,7 @@ function fallback(message){
 const sceneStartupTimer=setTimeout(()=>{
   if(!space)fallback('三维教室资源载入较慢，可刷新重试。仍可使用文字课堂和真人教室。');
 },45000);
-import('./space-scene.js?v=teacher-face-53').then(async({createSpace})=>{
+import('./space-scene.js?v=block-vr-56').then(async({createSpace})=>{
   clearTimeout(sceneStartupTimer);
   space=createSpace($('#universe'),(state,detail)=>{
     if(state==='ready'){
@@ -453,6 +479,7 @@ import('./space-scene.js?v=teacher-face-53').then(async({createSpace})=>{
     if(state==='teacher-ready')$('#scene-loading').hidden=true;
     if(state==='teacher-gaussian-ready')$('#universe').dataset.teacherAppearance='gaussian';
     if(state==='teacher-gaussian-error')toast('猫老师的动态高斯暂未载入，可刷新重试。');
+    if(state==='student-body-error')toast(detail==='detail'?'橘猫学生已就绪，毛发细节暂未载入。':'橘猫学生暂未载入，可在形象菜单重试。');
     if(state==='teacher-tail-motion'){
       // Read-only DOM diagnostics for a reported motion failure; no extra UI.
       $('#universe').dataset.tailMotion=detail.mode;$('#universe').dataset.tailPose=detail.pose.join(',');

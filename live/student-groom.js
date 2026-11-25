@@ -1,4 +1,5 @@
 import * as THREE from '../three.module.min.js';
+import {STUDENT_NECKLINE} from './student-first-person.js?v=first-person-cat-55';
 
 const strandShader = /* glsl */ `
   uniform sampler2D centers;
@@ -70,11 +71,12 @@ const strandFragment = /* glsl */ `
   }
 `;
 
-function coatIndices({centers, colors, count}) {
+function coatIndices({centers, colors, count},firstPerson) {
   const selected = [];
   for (let index = 0; index < count; index++) {
     const i = index * 3, c = index * 4, tag = colors[c + 3];
     const x = Math.abs(centers[i]), y = centers[i + 1], z = centers[i + 2];
+    if (firstPerson && y >= STUDENT_NECKLINE) continue;
     const red = colors[c], green = colors[c + 1], blue = colors[c + 2];
     const inEye = z > .078 && y > .661 && y < .805 && x > .016 && x < .167;
     const nearTemple = x > .136 && x < .226 && z > .044 && Math.abs(y - (.736 - .57 * Math.max(0,x-.149))) < .018;
@@ -89,12 +91,12 @@ function coatIndices({centers, colors, count}) {
   return new Float32Array(selected);
 }
 
-function makeCoat(asset, skinning, joints, width) {
+function makeCoat(asset, skinning, joints, width,firstPerson) {
   const geometry = new THREE.InstancedBufferGeometry();
   const positions = [-1,0,0, 1,0,0, -1,.38,0, 1,.38,0, -1,.72,0, 1,.72,0, -1,1,0, 1,1,0];
   geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
   geometry.setIndex([0,1,2,1,3,2, 2,3,4,3,5,4, 4,5,6,5,7,6]);
-  const indices = coatIndices(asset);
+  const indices = coatIndices(asset,firstPerson);
   geometry.setAttribute('strandIndex',new THREE.InstancedBufferAttribute(indices,1));
   geometry.instanceCount = indices.length;
   const material = new THREE.ShaderMaterial({
@@ -172,6 +174,7 @@ function makeWhiskers(headPose) {
   return mesh;
 }
 
-export function createStudentGroom(asset, skinning, joints, width) {
-  return [makeCoat(asset,skinning,joints,width),makeWhiskers(joints[1])];
+export function createStudentGroom(asset,skinning,joints,width,firstPerson=false) {
+  const coat = makeCoat(asset,skinning,joints,width,firstPerson);
+  return firstPerson ? [coat] : [coat,makeWhiskers(joints[1])];
 }

@@ -1,10 +1,11 @@
 import * as THREE from '../three.module.min.js';
 import {GLTFLoader} from '../GLTFLoader.js';
-import {createGaussianSurface} from './student-gaussians.js?v=student-avatar-49';
-import {createStudentBacking} from './student-skin.js?v=student-avatar-49';
+import {createGaussianSurface} from './student-gaussians.js?v=first-person-cat-55';
+import {createStudentBacking} from './student-skin.js?v=first-person-cat-55';
+import {bindStudentFirstPersonArm, createStudentArms, STUDENT_EYES} from './student-first-person.js?v=block-vr-56';
 import {studentSeatMount} from './shared-seating.js?v=student-avatar-49';
 import {createStudentSpectacles} from './student-spectacles.js?v=student-avatar-49';
-import {createStudentCollar} from './student-collar.js?v=student-avatar-49';
+import {createStudentCollar} from './student-collar.js?v=first-person-cat-55';
 
 const detailFile = new URL('./student-cat-detail.glb?v=student-avatar-49', import.meta.url);
 const {clamp, smoothstep} = THREE.MathUtils;
@@ -28,6 +29,12 @@ const bones = [
   {pivot:[.079, .116, -.026], parent:rightHip},
   {pivot:[-.267, .316, -.030], parent:elbow},
 ].map(bone => ({...bone, pivot:new THREE.Vector3(...bone.pivot)}));
+const localPivots = [
+  ...bones.map(({pivot})=>pivot),
+  new THREE.Vector3(.151,.479,-.045),
+  new THREE.Vector3(.214,.390,-.037),
+  new THREE.Vector3(.258,.316,-.034),
+];
 let detailPromise;
 
 function loadDetail() {
@@ -59,7 +66,7 @@ function setWeights(skin, i, first, second, amount, mix) {
   skin[i + 3] = secondary;
 }
 
-function bindVertex(seated, x, y, z, part, skin, index) {
+function bindVertex(seated, firstPerson, x, y, z, part, skin, index) {
   if (part === 254) {
     const baseWeight = Math.max(smoothstep(-z, .125, .194), smoothstep(y, .165, .235));
     const rootWeight = seated ? .56 + .44 * baseWeight : baseWeight;
@@ -75,12 +82,13 @@ function bindVertex(seated, x, y, z, part, skin, index) {
     setWeights(skin,index,head,0,neckWeight,0);
     return;
   }
+  if (firstPerson && bindStudentFirstPersonArm(x,y,skin,index)) return;
   // Follow the actual silhouette of this sleeve. Below the elbow, keep the
   // wrist and paw together and put the narrow transition next to the vest.
   const armEdge = .157 + .144 * Math.max(0, .50 - y)
     + .012 * (1 - smoothstep(y, .277, .318));
   const blendWidth = .012 + .017 * smoothstep(y, .35, .475);
-  const armWeight = smoothstep(-x, armEdge - blendWidth, armEdge + blendWidth)
+  const armWeight = (firstPerson ? 0 : smoothstep(-x, armEdge - blendWidth, armEdge + blendWidth))
     * smoothstep(y, .218, .249) * (1 - smoothstep(y, .470, .515));
   if (armWeight > 0) {
     if (y <= .365) {
@@ -111,7 +119,7 @@ function motion(time) {
   };
 }
 
-export function createStudentAvatar({height=1.32, seated=false}={}) {
+export function createStudentAvatar({height=1.32, seated=false, firstPerson=false, progressive=false}={}) {
   const object = new THREE.Group();
   object.name = 'Orange Cat student';
   const visual = new THREE.Group();
@@ -124,10 +132,12 @@ export function createStudentAvatar({height=1.32, seated=false}={}) {
   }
   object.add(visual);
 
-  const joints = bones.map(() => new THREE.Matrix4());
+  const eyePosition = new THREE.Vector3(...STUDENT_EYES).multiplyScalar(height).add(visual.position);
+  const joints = Array.from({length:firstPerson ? localPivots.length : bones.length},()=>new THREE.Matrix4());
+  const arms = firstPerson ? createStudentArms(joints,localPivots,visual.position,height) : null;
   const eyeMount = new THREE.Group();
   eyeMount.matrixAutoUpdate = false;
-  visual.add(eyeMount);
+  if (!firstPerson) visual.add(eyeMount);
   const rotation = new THREE.Euler(0,0,0,'YXZ');
   const translatedPivot = new THREE.Vector3();
   const resources = [];
@@ -147,7 +157,7 @@ export function createStudentAvatar({height=1.32, seated=false}={}) {
     }
   }
 
-  function update(time, {headYaw,headPitch,raise,tail}={}) {
+  function update(time, {headYaw,headPitch,raise,tail,leftHand,rightHand}={}) {
     const demo = motion(time);
     const lift = clamp(raise ?? demo.raise, 0, 1);
     const bend = smoothstep(lift,.08,1);
@@ -156,10 +166,14 @@ export function createStudentAvatar({height=1.32, seated=false}={}) {
     const sway = (lag) => tailEnergy * (
       .67 * Math.sin(time * 1.34 - lag) + .33 * Math.sin(time * .81 - .65 * lag)
     );
-    pose(head,clamp(headPitch ?? -demo.pitch,-.53,.53),clamp(headYaw ?? demo.yaw,-.88,.88),.025 * lift);
-    pose(shoulder,-.27 * lift,-.045 * lift,-.18 * lift);
-    pose(elbow,-.86 * bend,.11 * bend,-.055 * bend);
-    pose(wrist,.12 * curl,-.055 * curl,.08 * curl);
+    if (arms) {
+      arms(leftHand,rightHand);
+    } else {
+      pose(head,clamp(headPitch ?? -demo.pitch,-.53,.53),clamp(headYaw ?? demo.yaw,-.88,.88),.025 * lift);
+      pose(shoulder,-.27 * lift,-.045 * lift,-.18 * lift);
+      pose(elbow,-.86 * bend,.11 * bend,-.055 * bend);
+      pose(wrist,.12 * curl,-.055 * curl,.08 * curl);
+    }
     // In the chair, the tail leaves the shorts low before curving out to the
     // side. The small sway follows this curve and stays clear of the vest.
     pose(tailRoot,tailRootRest[0],tailRootRest[1] + .075 * sway(0),tailRootRest[2],tailLift,tailDepth);
@@ -178,7 +192,7 @@ export function createStudentAvatar({height=1.32, seated=false}={}) {
   }
 
   update(0);
-  const bind = (x,y,z,part,skin,index) => bindVertex(seated,x,y,z,part,skin,index);
+  const bind = (x,y,z,part,skin,index) => bindVertex(seated,firstPerson,x,y,z,part,skin,index);
   function track(model) {
     if (disposed) model.dispose();
     else resources.push(model);
@@ -196,6 +210,9 @@ export function createStudentAvatar({height=1.32, seated=false}={}) {
       for (const material of materials) material.dispose();
     }});
   }
+  function mountCollar() {
+    mountAccessory(visual,createStudentCollar({joints,bindVertex:bind}));
+  }
   function dispose() {
     if (disposed) return;
     disposed = true;
@@ -205,21 +222,43 @@ export function createStudentAvatar({height=1.32, seated=false}={}) {
     for (const resource of resources) resource.dispose();
     resources.length = 0;
   }
+  if (firstPerson && progressive) {
+    // Put the textured seated body and its collar in place before refining the coat.
+    const bodyReady = createStudentBacking(joints,bind,{firstPerson}).then(backing => {
+      track(backing);
+      if (!disposed) {
+        visual.add(backing.object);
+        mountCollar();
+      }
+    }).catch(error => {
+      dispose();
+      throw error;
+    });
+    const ready = bodyReady.then(async () => {
+      if (disposed) return {gaussianCount:0};
+      const model = track(await createGaussianSurface(joints,bind,{firstPerson}));
+      if (!disposed) visual.add(model.object);
+      return {gaussianCount:model.count};
+    });
+    return {object,eyePosition,bodyReady,ready,update,dispose};
+  }
   const ready = Promise.all([
-    createGaussianSurface(joints,bind).then(track),
-    createStudentBacking(joints,bind).then(track),
-    loadDetail(),
+    createGaussianSurface(joints,bind,{firstPerson}).then(track),
+    createStudentBacking(joints,bind,{firstPerson}).then(track),
+    firstPerson ? null : loadDetail(),
   ]).then(([model,backing,details]) => {
     if (!disposed) {
       visual.add(backing.object,model.object);
-      eyeMount.add(details.clone());
-      mountAccessory(eyeMount,createStudentSpectacles());
-      mountAccessory(visual,createStudentCollar({joints,bindVertex:bind}));
+      if (details) {
+        eyeMount.add(details.clone());
+        mountAccessory(eyeMount,createStudentSpectacles());
+      }
+      mountCollar();
     }
     return {gaussianCount:model.count};
   }).catch(error => {
     dispose();
     throw error;
   });
-  return {object,ready,update,dispose};
+  return {object,eyePosition,bodyReady:ready,ready,update,dispose};
 }

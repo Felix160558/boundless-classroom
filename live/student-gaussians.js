@@ -1,6 +1,7 @@
 import * as THREE from '../three.module.min.js';
-import {createStudentGroom} from './student-groom.js?v=student-avatar-49';
+import {createStudentGroom} from './student-groom.js?v=first-person-cat-55';
 import {textileCoverage} from './student-textile.js?v=student-avatar-49';
+import {STUDENT_NECKLINE} from './student-first-person.js?v=first-person-cat-55';
 
 const file = new URL('./student-cat-splats.bin?v=student-avatar-49', import.meta.url);
 const textureWidth = 512;
@@ -132,8 +133,9 @@ const fragmentShader = /* glsl */ `
   }
 `;
 
-function depthOrder(asset, skin, joints, indices) {
-  const {centers, count} = asset;
+function depthOrder(asset, skin, joints, indices, visible) {
+  const {centers} = asset;
+  const count = indices.count;
   const counts = new Uint32Array(depthBins);
   const bins = new Uint16Array(count);
   const coefficients = new Float32Array(joints.length * 4);
@@ -158,7 +160,8 @@ function depthOrder(asset, skin, joints, indices) {
     }
     counts.fill(0);
     for (let index = 0; index < count; index++) {
-      const i = index * 3, j = index * 4;
+      const source = visible ? visible[index] : index;
+      const i = source * 3, j = source * 4;
       const x = centers[i], y = centers[i + 1], z = centers[i + 2];
       const a = skin[j] * 4, b = skin[j + 1] * 4;
       const base = direction.x * x + direction.y * y + direction.z * z;
@@ -181,23 +184,36 @@ function depthOrder(asset, skin, joints, indices) {
       counts[bin] = offset;
       offset += size;
     }
-    for (let index = 0; index < count; index++) indices.array[counts[bins[index]]++] = index;
+    for (let index = 0; index < count; index++) {
+      indices.array[counts[bins[index]]++] = visible ? visible[index] : index;
+    }
     indices.needsUpdate = true;
   };
 }
 
-export async function createGaussianSurface(joints, bindVertex) {
+function torsoIndices({centers,count}) {
+  const visible = new Uint32Array(count);
+  let length = 0;
+  for (let index = 0; index < count; index++) {
+    if (centers[index * 3 + 1] < STUDENT_NECKLINE) visible[length++] = index;
+  }
+  return visible.subarray(0,length);
+}
+
+export async function createGaussianSurface(joints, bindVertex, {firstPerson=false}={}) {
   assetPromise ??= readAsset().catch(error => {
     assetPromise = null;
     throw error;
   });
   const asset = await assetPromise;
   const skin = new Uint8Array(textureWidth * asset.height * 4);
-  const order = new Float32Array(asset.count);
-  for (let index = 0; index < asset.count; index++) {
-    const from = index * 3;
-    bindVertex(asset.centers[from], asset.centers[from + 1], asset.centers[from + 2], asset.colors[index * 4 + 3], skin, index * 4);
-    order[index] = index;
+  const visible = firstPerson ? torsoIndices(asset) : null;
+  const order = new Float32Array(visible?.length ?? asset.count);
+  for (let index = 0; index < order.length; index++) {
+    const source = visible ? visible[index] : index;
+    const from = source * 3;
+    bindVertex(asset.centers[from], asset.centers[from + 1], asset.centers[from + 2], asset.colors[source * 4 + 3], skin, source * 4);
+    order[index] = source;
   }
   const skinTexture = texture(skin, asset.height, THREE.UnsignedByteType);
   const geometry = new THREE.InstancedBufferGeometry();
@@ -206,7 +222,7 @@ export async function createGaussianSurface(joints, bindVertex) {
   geometry.setAttribute('position', quad.attributes.position);
   const indices = new THREE.InstancedBufferAttribute(order, 1).setUsage(THREE.DynamicDrawUsage);
   geometry.setAttribute('orderIndex', indices);
-  geometry.instanceCount = asset.count;
+  geometry.instanceCount = indices.count;
 
   const viewport = new THREE.Vector2(1, 1);
   const viewportRect = new THREE.Vector4();
@@ -222,18 +238,18 @@ export async function createGaussianSurface(joints, bindVertex) {
   const surface = new THREE.Mesh(geometry, material);
   surface.name = 'Skinned anisotropic Gaussian surface';
   surface.frustumCulled = false;
-  const sort = depthOrder(asset, skin, joints, indices);
+  const sort = depthOrder(asset, skin, joints, indices, visible);
   surface.onBeforeRender = (renderer, scene, camera) => {
     const rect = camera.viewport || renderer.getCurrentViewport(viewportRect);
     viewport.set(rect.z, rect.w);
     sort(camera, surface);
   };
-  const groom = createStudentGroom(asset,skinTexture,joints,textureWidth);
+  const groom = createStudentGroom(asset,skinTexture,joints,textureWidth,firstPerson);
   const object = new THREE.Group();
   object.name = 'Orange cat coat and whiskers';
   object.add(surface,...groom);
   return {
-    object, count:asset.count,
+    object, count:indices.count,
     dispose() {
       for (const mesh of object.children) {
         mesh.geometry.dispose();

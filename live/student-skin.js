@@ -2,6 +2,7 @@ import * as THREE from '../three.module.min.js';
 import {GLTFLoader} from '../GLTFLoader.js';
 import {MeshoptDecoder} from '../meshopt_decoder.mjs';
 import {textileFinish} from './student-textile.js?v=student-avatar-49';
+import {STUDENT_NECKLINE} from './student-first-person.js?v=first-person-cat-55';
 
 const file = new URL('./student-cat-support.glb?v=student-avatar-49', import.meta.url);
 let assetPromise;
@@ -21,7 +22,7 @@ function readBacking() {
   return assetPromise;
 }
 
-export function deformableMaterial(source, joints, textile=true) {
+export function deformableMaterial(source, joints, textile=true, cutHead=false) {
   const material = new THREE.MeshBasicMaterial({
     map:source.map, color:source.color, vertexColors:source.vertexColors,
     side:source.side, toneMapped:false,
@@ -52,13 +53,48 @@ export function deformableMaterial(source, joints, textile=true) {
       ${textileFinish}
     `).replace('#include <color_fragment>', `
       #include <color_fragment>
+      ${cutHead ? `if (avatarRest.y >= ${STUDENT_NECKLINE}) discard;` : ''}
       diffuseColor.rgb *= mix(1.,avatarWovenFinish(avatarRest,avatarNormal,diffuseColor.rgb),avatarTextile);
     `);
   };
+  material.customProgramCacheKey = () => `orange-cat-skin-${joints.length}-${cutHead}`;
   return material;
 }
 
-export async function createStudentBacking(joints, bindVertex) {
+function retainTorso(geometry,position) {
+  const source = geometry.getIndex();
+  if (!source) return;
+  const triangles = new source.array.constructor(source.count);
+  let written = 0;
+  for (let i=0; i<source.count; i+=3) {
+    const [a,b,c] = [source.getX(i),source.getX(i+1),source.getX(i+2)];
+    if (Math.min(position.getY(a),position.getY(b),position.getY(c)) >= STUDENT_NECKLINE) continue;
+    triangles[written++] = a;
+    triangles[written++] = b;
+    triangles[written++] = c;
+  }
+  geometry.setIndex(new THREE.BufferAttribute(triangles.subarray(0,written),1));
+}
+
+function innerNeckline() {
+  // Looking straight down can see into the opening beneath the folded collar.
+  // Tuck a small closure inside that fold, below the retained edge of the mesh.
+  const geometry = new THREE.CircleGeometry(1,48);
+  geometry.rotateX(-Math.PI/2);
+  geometry.scale(.114,1,.130);
+  geometry.translate(-.004,STUDENT_NECKLINE-.002,-.038);
+  const positions = geometry.getAttribute('position');
+  const colors = new Float32Array(positions.count*3);
+  const lining = new THREE.Color(0xe7c9ae), fold = new THREE.Color(0xf1e3d7);
+  lining.toArray(colors);
+  for (let index=1;index<positions.count;index++) fold.toArray(colors,index*3);
+  geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));
+  const mesh = new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({vertexColors:true,toneMapped:false}));
+  mesh.name = 'First-person inner neckline';
+  return mesh;
+}
+
+export async function createStudentBacking(joints, bindVertex, {firstPerson=false}={}) {
   const parts = await readBacking();
   const root = new THREE.Group();
   root.name = 'Continuous skinned surface beneath the Gaussians';
@@ -66,16 +102,19 @@ export async function createStudentBacking(joints, bindVertex) {
     const source = parts.get(part);
     const geometry = source.geometry.clone();
     const position = geometry.getAttribute('position');
+    const cutHead = firstPerson && part==='Body';
+    if (cutHead) retainTorso(geometry,position);
     const skin = new Uint8Array(position.count * 4);
     for (let index = 0; index < position.count; index++) {
       bindVertex(position.getX(index), position.getY(index), position.getZ(index), tag, skin, index * 4);
     }
     geometry.setAttribute('avatarBinding', new THREE.BufferAttribute(skin, 4, true));
-    const mesh = new THREE.Mesh(geometry, deformableMaterial(source.material, joints,tag===255));
+    const mesh = new THREE.Mesh(geometry, deformableMaterial(source.material,joints,tag===255,cutHead));
     mesh.frustumCulled = false;
     mesh.name = part;
     root.add(mesh);
   }
+  if (firstPerson) root.add(innerNeckline());
   return {
     object:root,
     dispose() {

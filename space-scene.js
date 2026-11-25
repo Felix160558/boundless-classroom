@@ -2,6 +2,9 @@ import * as THREE from './three.module.min.js';
 import {createCatTeacher} from './cat-teacher.js?v=teacher-face-53';
 import {createMoleculeStage} from './molecule-lesson.js?v=quiet-shape-31';
 import {createSpaceSky} from './space-sky.js?v=medieval-lounge-40';
+import {createLocalStudentBody} from './live/student-vr-body.js?v=block-vr-56';
+import {createXRAvatarMenu} from './live/xr-avatar-menu.js?v=block-vr-56';
+import {avatarPreference} from './live/avatar-preference.js?v=block-vr-56';
 
 const TAU = Math.PI * 2;
 
@@ -17,18 +20,19 @@ export function createSpace(container, onState=()=>{}) {
   renderer.shadowMap.enabled=true;
   renderer.shadowMap.type=THREE.PCFSoftShadowMap;
   renderer.xr.enabled=true;
+  renderer.xr.setReferenceSpaceType('local');
   container.append(renderer.domElement);
   renderer.domElement.setAttribute('aria-hidden','true');
   const camera=new THREE.PerspectiveCamera(42,1,.1,600);
   const rig=new THREE.Group();rig.add(camera);scene.add(rig);
-  const seatPosition=new THREE.Vector3(.8,1.38,2.06);
+  const seatPosition=new THREE.Vector3(),nextSeatPosition=new THREE.Vector3();
   const seatDirection=new THREE.Vector3(),xrHeadPosition=new THREE.Vector3(),xrForward=new THREE.Vector3();
   let seatBaseYaw=-.245,seatYaw=-.245,seatPitch=.065,desiredSeatYaw=-.245,desiredSeatPitch=.065,xrSeatPending=false;
   const room=new THREE.Group();scene.add(room);
   const moleculeStage=createMoleculeStage(room);
   let molecularState={ids:[],dipole:false},moleculeDragging=false;
   let mode='home',zoom=1,dragX=0,dragY=0,pointerX=0,pointerY=0;
-  let moving=false,lastX=0,lastY=0,lastTime=0,frameTime=0,session=null;
+  let moving=false,lastX=0,lastY=0,lastTime=0,frameTime=0,session=null,openingXR=false,xrAvatarMenu=null;
   let boardTitle='Stay curious.', boardSubtitle='Every question is a beginning.',boardLesson=null;
   const desiredPosition=new THREE.Vector3(),desiredTarget=new THREE.Vector3(),target=new THREE.Vector3(0,1,0);
   const materials={
@@ -156,6 +160,17 @@ export function createSpace(container, onState=()=>{}) {
   mesh(desktopGeometry,new THREE.MeshPhysicalMaterial({color:0xc9c9b7,roughness:.43,clearcoat:.25,clearcoatRoughness:.32}),table);
   for(const x of [-.76,.76])for(const z of [-.32,.32])box(.04,.82,.04,materials.edge,x,.49,z,table);
   const chair=new THREE.Group();chair.position.set(.8,0,2.06);room.add(chair);
+  const studentBody=createLocalStudentBody(room,{
+    onChange:alignStudentEyes,
+    onError:(_,phase)=>onState('student-body-error',phase),
+  });
+  studentBody.setSeat({x:chair.position.x,y:chair.position.y,z:chair.position.z,yaw:chair.rotation.y});
+  studentBody.setAppearance(avatarPreference.current);
+  studentBody.eyePosition(seatPosition);
+  avatarPreference.subscribe(avatar=>{
+    studentBody.setAppearance(avatar);
+    if(mode==='classroom')studentBody.preload();
+  });
   // One closed, mirrored surface per panel. Shared rings and analytic normals
   // keep the flat faces and rounded edges continuous at every corner.
   function roundedChairPanel(width,height,thickness,radius,bevel){
@@ -250,6 +265,7 @@ export function createSpace(container, onState=()=>{}) {
       THREE.MathUtils.radToDeg(2*Math.atan(Math.tan(THREE.MathUtils.degToRad(42)*.5)*h/visibleHeight)):42;
     if(!renderer.xr.isPresenting){
       camera.fov=fov;
+      camera.near=mode==='vr'?.035:.1;
       if(mode==='classroom'){
         const panelWidth=document.querySelector('.chat-panel')?.getBoundingClientRect().width||0;
         camera.setViewOffset(w,h,compactClassroom?0:panelWidth*.5,compactClassroom?(h-visibleHeight)*.5:0,w,h);
@@ -278,6 +294,17 @@ export function createSpace(container, onState=()=>{}) {
   function snapView(){
     camera.position.copy(desiredPosition);target.copy(desiredTarget);
     seatYaw=desiredSeatYaw;seatPitch=desiredSeatPitch;camera.lookAt(target);
+  }
+  function alignStudentEyes(){
+    if(mode!=='vr')return;
+    studentBody.eyePosition(nextSeatPosition);
+    if(renderer.xr.isPresenting&&!xrSeatPending){
+      rig.position.add(nextSeatPosition).sub(seatPosition);
+      rig.updateMatrixWorld(true);
+    }
+    seatPosition.copy(nextSeatPosition);
+    placeTeacher(true);
+    pose();
   }
   function resize(){const w=container.clientWidth,h=container.clientHeight;renderer.setSize(w,h);spaceSky.resize(h,renderer.getPixelRatio());camera.aspect=w/h;camera.updateProjectionMatrix();pose();}
   const observer=new ResizeObserver(resize);observer.observe(container);resize();snapView();
@@ -359,6 +386,9 @@ export function createSpace(container, onState=()=>{}) {
     if(next===mode){pose();return;}
     const wasSeated=mode==='vr';mode=next;zoom=1;dragX=dragY=0;
     if(mode==='vr'){seatBaseYaw=container.clientWidth<650?-.45:-.245;room.position.y=0;}
+    studentBody.setVisible(mode==='vr',{tracked:Boolean(session)});
+    if(mode==='classroom')studentBody.preload();
+    if(wasSeated&&mode!=='vr'&&session)void session.end().catch(()=>{});
     placeTeacher(mode==='vr');teacher.setClassroomMode(mode==='classroom'||mode==='vr');
     moleculeStage.group.visible=mode!=='home'&&molecularState.ids.length>0;
     container.tabIndex=mode==='vr'||molecularState.ids.length>0&&mode==='classroom'?0:-1;container.setAttribute('role',container.tabIndex===0?'region':'img');
@@ -384,13 +414,14 @@ export function createSpace(container, onState=()=>{}) {
     if(document.hidden&&!renderer.xr.isPresenting)return;
     if(!renderer.xr.isPresenting && time-frameTime<25)return;frameTime=time;
     const dt=Math.min((time-lastTime)/1000,.05);lastTime=time;
-    if(renderer.xr.isPresenting&&xrSeatPending&&xrFrame){
-      const viewer=xrFrame.getViewerPose(renderer.xr.getReferenceSpace());
+    const referenceSpace=xrFrame&&renderer.xr.isPresenting?renderer.xr.getReferenceSpace():null;
+    if(referenceSpace&&xrSeatPending){
+      const viewer=xrFrame.getViewerPose(referenceSpace);
       if(viewer){
         const orientation=viewer.transform.orientation,position=viewer.transform.position;
         xrForward.set(0,0,-1).applyQuaternion(new THREE.Quaternion(orientation.x,orientation.y,orientation.z,orientation.w));
         const heading=Math.atan2(xrForward.x,-xrForward.z);
-        rig.rotation.set(0,heading+.245,0);
+        rig.rotation.set(0,heading-seatBaseYaw,0);
         xrHeadPosition.set(position.x,position.y,position.z).applyQuaternion(rig.quaternion);
         rig.position.copy(seatPosition).sub(xrHeadPosition);rig.updateMatrixWorld(true);xrSeatPending=false;
       }
@@ -415,22 +446,56 @@ export function createSpace(container, onState=()=>{}) {
         room.position.y=reduceMotion.matches?0:Math.sin(time*.00035)*.045;
       }
     }else room.position.y=0;
+    if(mode==='vr')studentBody.update(time/1000,{
+      frame:xrSeatPending?null:xrFrame,referenceSpace,rig,dt,
+    });
+    if(referenceSpace&&!xrSeatPending)xrAvatarMenu?.update(xrFrame,referenceSpace);
     renderer.render(scene,camera);
   });
   async function immersiveSupported(){if(!isSecureContext||!navigator.xr)return false;try{return await navigator.xr.isSessionSupported('immersive-vr');}catch{return false;}}
   async function enterImmersive(){
-    if(!(await immersiveSupported()))throw new Error('此浏览器或设备不支持沉浸式头显。');
-    const active=await navigator.xr.requestSession('immersive-vr',{requiredFeatures:['local-floor']});session=active;
-    renderer.xr.setReferenceSpaceType('local-floor');xrSeatPending=true;
-    // The first tracked frame aligns the seat; keep the desktop camera still while XR starts.
-    function restoreSeat(){
-      xrSeatPending=false;rig.position.set(0,0,0);rig.rotation.set(0,0,0);pose();
-      camera.fov=mode==='vr'?(container.clientWidth<650?78:66):42;camera.updateProjectionMatrix();snapView();
+    if(session||openingXR||mode!=='vr')return;
+    if(!isSecureContext||!navigator.xr)throw new Error('此浏览器或设备不支持沉浸式头显。');
+    openingXR=true;
+    try{
+      // Request from the button gesture. The seated calibration does not need
+      // a physical floor-level origin to preserve the headset's relative pose.
+      const active=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['hand-tracking']});
+      if(mode!=='vr'){await active.end();return;}
+      session=active;
+      xrSeatPending=true;
+      studentBody.setVisible(true,{tracked:true});
+      let referenceSpace=null;
+      const resetSeat=()=>{xrSeatPending=true;studentBody.resetInput();};
+      function restoreSeat(){
+        referenceSpace?.removeEventListener('reset',resetSeat);
+        xrAvatarMenu?.attach(null);
+        xrSeatPending=false;studentBody.setVisible(mode==='vr');studentBody.resetInput();
+        rig.position.set(0,0,0);rig.rotation.set(0,0,0);pose();
+        camera.fov=mode==='vr'?(container.clientWidth<650?78:66):42;
+        camera.updateProjectionMatrix();snapView();
+      }
+      active.addEventListener('end',()=>{
+        if(session!==active)return;
+        session=null;restoreSeat();onState('xr-end');
+      },{once:true});
+      try{await renderer.xr.setSession(active);}
+      catch(error){
+        if(session===active){session=null;restoreSeat();}
+        await active.end().catch(()=>{});
+        throw error;
+      }
+      if(session!==active)return;
+      referenceSpace=renderer.xr.getReferenceSpace();
+      referenceSpace?.addEventListener('reset',resetSeat);
+      xrAvatarMenu??=createXRAvatarMenu(scene,rig,()=>renderer.xr.getReferenceSpace(),
+        ()=>avatarPreference.current,avatar=>avatarPreference.select(avatar),
+        {unlocked:()=>avatarPreference.unlocked,language:'zh'});
+      xrAvatarMenu.attach(active,{position:seatPosition.toArray(),yaw:-seatBaseYaw});
+      onState('xr-start');
+    }finally{
+      openingXR=false;
     }
-    active.addEventListener('end',()=>{if(session!==active)return;session=null;restoreSeat();onState('xr-end');},{once:true});
-    try{await renderer.xr.setSession(active);}catch(error){await active.end();session=null;restoreSeat();throw error;}
-    if(session!==active)return;
-    onState('xr-start');
   }
   onState('ready');
   teacher.load();

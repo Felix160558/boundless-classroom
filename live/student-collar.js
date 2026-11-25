@@ -1,5 +1,5 @@
 import * as THREE from '../three.module.min.js';
-import {deformableMaterial} from './student-skin.js?v=student-avatar-49';
+import {deformableMaterial} from './student-skin.js?v=first-person-cat-55';
 
 // Rest-pose sections around the model's neck. Each section has a lower and
 // upper edge, with radii measured at the lower edge, middle, and upper edge.

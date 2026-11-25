@@ -5,8 +5,9 @@ import {createRoomCast} from './room-cast.js?v=station-room-38';
 import {createRoomPointer} from './room-pointer.js?v=station-room-38';
 import {mountAppointment} from './appointment.js?v=medieval-lounge-40';
 import {mountRoomInvitation, roomCodeFromURL, roomServiceOrigin} from './room-invitation.js?v=trio-online-54';
-import {stationView} from './room-sky.js?v=trio-classroom-50';
+import {stationView} from './room-sky.js?v=block-vr-56';
 import {createPreviewRoom, isPagesPreview, PREVIEW_NOTICE} from './preview-room.js?v=trio-online-54';
+import {avatarPreference} from './avatar-preference.js?v=block-vr-56';
 
 import {lookupBoardMolecule, recognizeBoardMolecule, selectCircledInk, strokesAtEraser} from './board-chemistry.js?v=ink-chemboard-42';
 
@@ -25,9 +26,6 @@ const moleculePicker = $('molecule-select');
 const correction = $('ink-correction');
 const avatarMenu = $('avatar-menu');
 const avatarButtons = [...avatarMenu.querySelectorAll('[data-avatar]')];
-const avatarTypes = new Set(avatarButtons.map(button=>button.dataset.avatar));
-const avatarStorageKey = role=>`boundless.classroom.avatar.${role}`;
-const savedAvatars = new Map();
 const errors = {
   role_taken:'That role already has an occupant in this room.',
   room_not_found:'Room not found. Ask the teacher to open it and check the code.',
@@ -64,7 +62,7 @@ let checkingEntry = false;
 let modelDrag = null;
 let currentMolecule = null, confirmedMolecule = null, moleculeRenderer = null, moleculeLoad = null;
 let remotePresentation = false, boardDuringPresentation = false, lastCastStream = null, castRevision = 0;
-let activeAvatar = 'simple', trackedHead = null;
+let activeAvatar = avatarPreference.current, trackedHead = null;
 const mediaText = text => { $('media-status').textContent = text; };
 const boardText = text => { $('board-status').textContent = text; };
 const message = error => errors[error.code] || (error.name === 'AbortError' ? 'Connection cancelled.' : error.message || 'Connection unavailable.');
@@ -348,39 +346,31 @@ function updatePresence() {
   const detail={role,seat,peers:role ? [...peers.values()].map(remote=>remote.person) : []};
   workspace.dispatchEvent(new CustomEvent('room-presence',{detail}));
 }
-function preferredAvatar(role) {
-  if (savedAvatars.has(role)) return savedAvatars.get(role);
-  try {
-    const saved=localStorage.getItem(avatarStorageKey(role));
-    return avatarTypes.has(saved)?saved:null;
-  } catch { return null; }
-}
 function syncAvatar() {
   if (!soloPreview && session) void sendAvatar({avatar:activeAvatar,...trackedHead});
 }
 function renderAvatarChoice() {
-  avatarMenu.hidden=!session || soloPreview;
+  avatarMenu.hidden=!session;
   if (avatarMenu.hidden) avatarMenu.open=false;
-  if (workspace.dataset.avatar!==activeAvatar) {
-    workspace.dataset.avatar=activeAvatar;
-    workspace.dispatchEvent(new Event('room-local-avatar'));
+  workspace.dataset.avatar=activeAvatar;
+  if (session) workspace.dispatchEvent(new Event('room-local-avatar'));
+  for (const button of avatarButtons) {
+    button.setAttribute('aria-pressed',String(button.dataset.avatar===activeAvatar));
+    if (button.dataset.avatar==='orange-cat') {
+      button.textContent=avatarPreference.unlocked?'Orange Cat':'Unlock Orange Cat';
+    }
   }
-  for (const button of avatarButtons) button.setAttribute('aria-pressed',String(button.dataset.avatar===activeAvatar));
 }
-function chooseAvatar(avatar, explicit=false) {
-  if (!session || soloPreview || !avatarTypes.has(avatar)) return;
-  if (explicit) {
-    savedAvatars.set(session.role,avatar);
-    try { localStorage.setItem(avatarStorageKey(session.role),avatar); } catch { /* This room still keeps the choice. */ }
-  }
-  if (activeAvatar===avatar) return;
-  activeAvatar=avatar; trackedHead=null;
+avatarPreference.subscribe(()=>{
+  const changed=activeAvatar!==avatarPreference.current;
+  activeAvatar=avatarPreference.current;
+  if (changed) trackedHead=null;
   renderAvatarChoice();
-  syncAvatar();
-}
+  if (changed) syncAvatar();
+});
 for (const button of avatarButtons) {
   button.addEventListener('click',()=>{
-    chooseAvatar(button.dataset.avatar,true);
+    if (session) avatarPreference.select(button.dataset.avatar);
     avatarMenu.open=false;
     avatarMenu.querySelector('summary').focus();
   });
@@ -394,13 +384,14 @@ document.addEventListener('keydown',event=>{
   avatarMenu.querySelector('summary').focus();
   event.preventDefault();
 });
-workspace.addEventListener('room-avatar-choice',event=>chooseAvatar(event.detail,true));
+workspace.addEventListener('room-avatar-choice',event=>{
+  if (session) avatarPreference.select(event.detail);
+});
 workspace.addEventListener('room-vr-mode',event=>{
-  if (event.detail && session?.role==='student' && !preferredAvatar('student')) chooseAvatar('orange-cat');
   if (!event.detail && trackedHead) { trackedHead=null; syncAvatar(); }
 });
 workspace.addEventListener('room-avatar-head',event=>{
-  if (activeAvatar!=='orange-cat' || !session) return;
+  if (!session || soloPreview) return;
   trackedHead=event.detail;
   syncAvatar();
 });
@@ -917,7 +908,7 @@ async function leave(note='',unloading=false) {
   if (leaving) return;
   leaving=true;
   const previous=session, g=++generation; session=null; online=false; joining=false; pollController?.abort(); cancelStroke();
-  activeAvatar='simple'; trackedHead=null; renderAvatarChoice();
+  trackedHead=null; renderAvatarChoice();
   modelDrag=null;
   pendingPoses.clear(); clearTimeout(poseTimer); poseTimer=null;
   cast.stop(); remotePresentation=false; boardDuringPresentation=false;
@@ -1016,7 +1007,7 @@ async function joinRoom(role, code, hostKey) {
     const joined=await api('join',{code,role,...(hostKey?{hostKey}:{})});
     if(g!==generation) { api('leave',{}, {token:joined.token}).catch(()=>{}); return; }
     session={...joined,role,code}; sequence=joined.sequence; online=true; board.reset(joined.epoch,joined.board); updateChemistry(joined.chemistry || []);
-    activeAvatar=preferredAvatar(role) ?? 'simple'; trackedHead=null;
+    activeAvatar=avatarPreference.current; trackedHead=null;
     renderAvatarChoice();
     if (activeAvatar!=='simple') syncAvatar();
     if (role==='teacher') hostedCode=code;

@@ -4,8 +4,11 @@ import {BOARD_DEPTH, createStationCabin} from './station-cabin.js?v=trio-classro
 import {createCastleLounge} from './castle-lounge.js?v=star-window-41';
 
 import {createPreviewMolecules} from './preview-molecules.js?v=shared-classroom-43';
-import {createSharedSeating, seatPose, seatedView, SHARED_BOARD} from './shared-seating.js?v=trio-classroom-50';
-import {createXRAvatarMenu} from './xr-avatar-menu.js?v=student-avatar-45';
+import {createSharedSeating, seatPose, seatedView, SHARED_BOARD, SHARED_FLOOR, FURNITURE_INSET,
+  SEATED_STUDENT_HEIGHT} from './shared-seating.js?v=block-vr-56';
+import {createLocalStudentBody} from './student-vr-body.js?v=block-vr-56';
+import {createXRAvatarMenu} from './xr-avatar-menu.js?v=block-vr-56';
+import {avatarPreference} from './avatar-preference.js?v=block-vr-56';
 
 export const stationView = {
   ready:false,
@@ -73,8 +76,9 @@ function startStation() {
   let roomSeat=workspace.dataset.seat || roomRole;
   const canRotate=()=>roomRole!=='student';
   const seating=createSharedSeating(cabin.group,()=>{needsFrame=true;});
-  const avatarMenu=createXRAvatarMenu(scene,rig,()=>renderer.xr.getReferenceSpace(),()=>workspace.dataset.avatar,
-    avatar=>workspace.dispatchEvent(new CustomEvent('room-avatar-choice',{detail:avatar})));
+  const avatarMenu=createXRAvatarMenu(scene,rig,()=>renderer.xr.getReferenceSpace(),()=>avatarPreference.current,
+    avatar=>workspace.dispatchEvent(new CustomEvent('room-avatar-choice',{detail:avatar})),
+    {unlocked:()=>avatarPreference.unlocked});
   const chemistry=createPreviewMolecules(cabin.group,{rig,canRotate,onPose:(key,rotation,final=false)=>{
     if (roomRole==='teacher') workspace.dispatchEvent(new CustomEvent('room-chemistry-pose',{detail:{key,rotation,final}}));
   }});
@@ -88,12 +92,66 @@ function startStation() {
   const projected=new THREE.Vector3();
   const headDirection=new THREE.Vector3();
   const headQuaternion=new THREE.Quaternion();
+  const seatedEye=new THREE.Vector3();
+  const eyeShift=new THREE.Vector3();
   let preview=false, xrSession=null, xrSupported=false, opening=false, ownFullscreen=false;
   let yaw=0,pitch=0,drag=null,lastFrame=null,needsFrame=true,layoutRequest=null,xrAlign=false;
+  let xrEyeAnchor=null, xrReferenceSpace=null;
   let lastHead=null,lastHeadAt=-Infinity;
   const xrUp=new THREE.Vector3(0,1,0);
   lounge.group.userData.requestRender=()=>{needsFrame=true;};
   const inClassroom=()=>document.body.dataset.station==='classroom';
+  const localBody=createLocalStudentBody(cabin.group,{
+    height:SEATED_STUDENT_HEIGHT,
+    onChange:refreshAvatarView,
+    onError:(_error,phase)=>{
+      if (preview&&inClassroom()) status.textContent=phase==='detail'
+        ? 'Orange Cat is ready. Fur detail could not load.'
+        : 'Orange Cat could not load. Block Figure is ready.';
+    },
+  });
+
+  function localSeat() {
+    if (!inClassroom()) return null;
+    if (roomRole) {
+      const seat=seatPose(roomSeat);
+      return seat?{...seat,y:SHARED_FLOOR-FURNITURE_INSET}:null;
+    }
+    // Solo previews build one chair at the origin on their responsive floor.
+    const boardSurface=cabin.boardSurface();
+    const floor=boardSurface?Math.min(SHARED_FLOOR,boardSurface.y-boardSurface.height*.5-.17):SHARED_FLOOR;
+    return {x:0,y:floor-FURNITURE_INSET,z:0,yaw:0};
+  }
+
+  function syncLocalBody() {
+    const seat=localSeat();
+    if (seat) localBody.setSeat(seat);
+    localBody.setVisible(Boolean(seat&&preview),{tracked:Boolean(xrSession)});
+  }
+
+  function prepareAvatar() {
+    if (!inClassroom()) return;
+    localBody.setAppearance(avatarPreference.current);
+    localBody.preload();
+  }
+
+  function refreshAvatarView() {
+    if (!xrSession) pose();
+    else if (!xrAlign && xrEyeAnchor && inClassroom()) {
+      // Move the calibrated seat when the visible body changes. Preserve the
+      // wearer's head orientation and real-world offset from the seat.
+      eyeShift.fromArray(viewerSeat().position).sub(xrEyeAnchor);
+      rig.position.add(eyeShift);
+      xrEyeAnchor.add(eyeShift);
+      rig.updateMatrixWorld(true);
+    }
+    needsFrame=true;
+  }
+
+  function resetXRSeat() {
+    xrAlign=true;
+    localBody.resetInput();
+  }
 
   function rayAt(event) {
     const rect=container.getBoundingClientRect();
@@ -159,8 +217,8 @@ function startStation() {
     const surface=cabin.boardSurface();
     chemistry.layout(surface ? {...surface,shared:Boolean(roomRole)} : null);
     lounge.layout(camera,width,height);
-    positionPortraitButtons();
-    needsFrame=true;
+    syncLocalBody();
+    pose();
   }
   scene.background=new THREE.Color('#07090e');
 
@@ -171,6 +229,7 @@ function startStation() {
   const viewerSeat = () => {
     const seat=inClassroom()?roomSeat:null;
     const view=seatedView(seat,workspace.dataset.avatar);
+    if (preview&&localSeat()) view.position=localBody.eyePosition(seatedEye).toArray();
     if (seat==='student-2') {
       const [x,,z]=view.position;
       const boardYaw=Math.atan2(x-SHARED_BOARD.x,BOARD_DEPTH+z);
@@ -180,17 +239,23 @@ function startStation() {
     return view;
   };
   function pose() {
-    const sharedSeat=inClassroom() && roomSeat;
+    const seated=inClassroom() && (roomSeat || preview);
     const view=viewerSeat();
     if (xrSession) camera.position.set(0,0,0);
     else camera.position.fromArray(view.position);
-    camera.rotation.set(xrSession?0:pitch-(sharedSeat ? .06 : 0),xrSession?0:view.yaw+yaw,0,'YXZ');
+    camera.rotation.set(xrSession?0:pitch-(seated ? .06 : 0),xrSession?0:view.yaw+yaw,0,'YXZ');
     camera.updateMatrixWorld(true);
     centerButton.hidden=Math.abs(yaw)+Math.abs(pitch)<.005;
     positionPortraitButtons();
     needsFrame=true;
   }
   centerButton.addEventListener('click',()=>{yaw=0;pitch=0;pose();});
+
+  function describePreview() {
+    status.textContent=preview&&!xrSession
+      ? (inClassroom()&&canRotate()?'Drag the room to look around, or drag a molecule to turn it. Esc to return.':'Drag to look around. Press Esc to return.')
+      : '';
+  }
 
   function setPreview(value) {
     preview=value;
@@ -200,15 +265,20 @@ function startStation() {
     vrButton.textContent=value?(inClassroom()?'Back to Classroom':'Back to Lounge'):'Enter VR';
     yaw=0;pitch=0;drag=null;
     for (const surface of [container,workspace,lobby]) surface.classList.remove('is-looking');
+    describePreview();
     if (inClassroom()) workspace.dispatchEvent(new CustomEvent('room-vr-mode',{detail:value}));
+    syncLocalBody();
     pose();
-    status.textContent=value&&!xrSession?(inClassroom()&&canRotate()?'Drag the room to look around, or drag a molecule to turn it. Esc to return.':'Drag to look around. Press Esc to return.'):'';
   }
 
   function exitPreview() {
+    xrReferenceSpace?.removeEventListener('reset',resetXRSeat);
+    xrReferenceSpace=null;
     rig.position.set(0,0,0);
     rig.rotation.set(0,0,0);
     xrAlign=false;
+    xrEyeAnchor=null;
+    localBody.resetInput();
     avatarMenu.attach(null);
     lastHead=null;lastHeadAt=-Infinity;
     setPreview(false);
@@ -246,6 +316,7 @@ function startStation() {
       const session=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['hand-tracking']});
       if (requestedRoom!==document.body.dataset.station) {await session.end();return;}
       xrSession=session;
+      resetXRSeat();
       session.addEventListener('end',()=>{
         if (xrSession!==session) return;
         xrSession=null;chemistry.attachXR(null);exitPreview();scheduleLayout();
@@ -253,10 +324,12 @@ function startStation() {
       setPreview(true);
       try {
         await renderer.xr.setSession(session);
-        xrAlign=true;
+        if (xrSession!==session) return;
+        xrReferenceSpace=renderer.xr.getReferenceSpace();
+        xrReferenceSpace?.addEventListener('reset',resetXRSeat);
         if (inClassroom()) {
           chemistry.attachXR(session);
-          if (roomRole) avatarMenu.attach(session,viewerSeat());
+          avatarMenu.attach(session,viewerSeat());
         }
       } catch(error) {
         await session.end().catch(()=>{});
@@ -328,22 +401,28 @@ function startStation() {
     if (roomRole!==role || roomSeat!==seat) {
       roomRole=role;
       roomSeat=seat;
+      if (xrSession) resetXRSeat();
+      syncLocalBody();
       pose(); scheduleLayout();
     }
     seating.show(roomSeat,peers);
     needsFrame=true;
   });
   workspace.addEventListener('room-local-avatar',()=>{
-    if (inClassroom() && !xrSession) pose();
+    describePreview();
+    prepareAvatar();
+    lastHead=null;
+    if (!xrSession) pose();
   });
   new MutationObserver(()=>{
     if (xrSession) void xrSession.end().catch(()=>{});
     if (preview) exitPreview();
+    prepareAvatar();
     yaw=0;pitch=0;pose();scheduleLayout();
   }).observe(document.body,{attributes:true,attributeFilter:['data-station']});
   const observer=new ResizeObserver(scheduleLayout);
   observer.observe(container);observer.observe(board);
-  layout();pose();
+  layout();prepareAvatar();
   stationView.boardPoint=(event,clamp=false)=>cabin.boardPoint(rayAt(event).ray,clamp);
   stationView.hitModel=event=>cabin.hitModel(rayAt(event));
   stationView.boardChemHit=event=>chemistry.hitTest(rayAt(event));
@@ -366,9 +445,11 @@ function startStation() {
         headDirection.set(0,0,-1).applyQuaternion(headQuaternion);
         const view=viewerSeat();
         const [x,y,z]=view.position;
+        xrEyeAnchor=new THREE.Vector3(x,y,z);
         rig.rotation.y=Math.atan2(headDirection.x,-headDirection.z)+view.yaw;
         rig.position.set(position.x,position.y,position.z).applyAxisAngle(xrUp,rig.rotation.y).negate();
         rig.position.x+=x; rig.position.y+=y; rig.position.z+=z;
+        rig.updateMatrixWorld(true);
         xrAlign=false;
       }
     }
@@ -380,16 +461,23 @@ function startStation() {
     sky.update(reduce.matches?0:elapsed);
     if (inClassroom()) {
       cabin.update(time,elapsed,preview);
+      if (preview) localBody.update(time/1000,{
+        frame:refSpace&&!xrAlign?xrFrame:null,
+        referenceSpace:refSpace,
+        rig,
+        dt:elapsed,
+      });
       if (refSpace&&!xrAlign) {
         chemistry.updateXR(xrFrame,refSpace);
         avatarMenu.update(xrFrame,refSpace);
-        if (workspace.dataset.avatar!=='orange-cat' || !roomSeat) lastHead=null;
+        const seat=seatPose(roomSeat);
+        if (!seat) lastHead=null;
         else if (time-lastHeadAt>=125) {
           const viewer=xrFrame.getViewerPose(refSpace);
           if (viewer) {
             const q=viewer.transform.orientation;
             headQuaternion.set(q.x,q.y,q.z,q.w);
-            headDirection.set(0,0,-1).applyQuaternion(headQuaternion).applyAxisAngle(xrUp,rig.rotation.y-seatPose(roomSeat).yaw);
+            headDirection.set(0,0,-1).applyQuaternion(headQuaternion).applyAxisAngle(xrUp,rig.rotation.y-seat.yaw);
             const headYaw=THREE.MathUtils.clamp(Math.atan2(-headDirection.x,-headDirection.z),-.90,.90);
             const headPitch=THREE.MathUtils.clamp(-Math.asin(THREE.MathUtils.clamp(headDirection.y,-1,1)),-.55,.55);
             if (!lastHead || Math.hypot(headYaw-lastHead.headYaw,headPitch-lastHead.headPitch)>.025) {

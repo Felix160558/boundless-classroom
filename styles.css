@@ -24,6 +24,14 @@ body[data-mode=vr] .wordmark{font-size:9px;gap:10px;color:#d6d9d6}
 body[data-mode=vr] .brand-mark{font-size:27px}body[data-mode=vr] .brand-sub{font-size:6px}
 body[data-mode=vr] .back-button{font-size:10px}body[data-mode=vr] .header-actions{gap:20px}
 body[data-mode=vr] .vr-entry{height:32px;padding:0 12px;font-size:10px;background:#0a101644;border-color:#c9d4d32b}
+.student-avatar-menu{position:relative}
+.student-avatar-menu summary{cursor:pointer;list-style:none}
+.student-avatar-menu summary::-webkit-details-marker{display:none}
+.student-avatar-menu summary:focus-visible{outline:2px solid var(--gold);outline-offset:4px}
+.student-avatar-options{position:absolute;top:calc(100% + 8px);right:0;min-width:120px;padding:5px;display:grid;gap:2px;background:#101823ed;border:1px solid #c9d4d32b;border-radius:6px;box-shadow:0 10px 25px #07090e38}
+.student-avatar-options button{padding:8px 10px;border-radius:3px;text-align:left;white-space:nowrap;font-size:11px}
+.student-avatar-options button:hover{background:#c3ced91a}
+.student-avatar-options [aria-pressed=true]{color:#f1d7ae;background:#d4ba951a}
 body[data-mode=vr] .grain{background:radial-gradient(ellipse at 50% 48%,transparent 47%,#00000020 100%)}
 body[data-mode=vr] #universe:focus{outline:none}
 .vr-seat-caption{position:absolute;left:3.5%;bottom:26px;display:flex;gap:20px;align-items:center;color:#c1cbc9;pointer-events:none;font-size:8px;letter-spacing:.18em;text-shadow:0 1px 8px #0009}
