@@ -1,5 +1,6 @@
 import * as THREE from '../three.module.min.js';
 import {blockStudentEye,createBlockStudent} from './block-student.js?v=block-vr-56';
+import {createFrogStudent,frogStudentEye} from './frog-student.js?v=frog-hair-73';
 
 export const SHARED_BOARD={x:0,y:.37,width:4.55,height:2.16};
 export const SHARED_FLOOR=-1.38;
@@ -21,6 +22,10 @@ export function seatPose(seatId) { return Object.hasOwn(seats,seatId)?seats[seat
 export function seatedView(seatId,avatar) {
   const seat=seatPose(seatId);
   if (!seat) return {position:[0,0,0],yaw:0};
+  if (avatar==='frog-girl') {
+    const eye=frogStudentEye().applyAxisAngle(new THREE.Vector3(0,1,0),seat.yaw+Math.PI);
+    return {position:[seat.x+eye.x,SHARED_FLOOR-FURNITURE_INSET+eye.y,seat.z+eye.z],yaw:seat.yaw};
+  }
   const simpleEye=blockStudentEye(SEATED_STUDENT_HEIGHT);
   let y=simpleEye.y, z=-simpleEye.z;
   if (avatar==='orange-cat') {
@@ -44,19 +49,26 @@ export function createSharedSeating(parent, onChange=()=>{}) {
     anchor.rotation.y=seat.yaw;
     anchor.visible=false;
     const figure=createBlockStudent({height:SEATED_STUDENT_HEIGHT,teacher:seatId==='teacher'});
-    // Shared seating faces -Z, while both avatar models face +Z.
+    // Shared seating faces -Z, while the avatar models face +Z.
     figure.object.rotation.y=Math.PI;
     anchor.add(figure.object);
     group.add(anchor);
     return {seatId,anchor,figure,phase:index*3.8,peerId:null,appearance:'simple',cat:null,loading:null,
+      frog:null,frogLoading:null,
       targetYaw:null,targetPitch:null,headYaw:0,headPitch:0};
   });
 
-  function updateAppearance(avatar) {
+  function updateAppearance(avatar,changedPeer=false) {
     const useCat=avatar.appearance==='orange-cat' && Boolean(avatar.cat);
+    const useFrog=avatar.appearance==='frog-girl' && Boolean(avatar.frog) && avatar.peerId!==null;
     avatar.anchor.visible=avatar.peerId!==null;
-    avatar.figure.object.visible=!useCat;
+    avatar.figure.object.visible=!useCat&&!useFrog;
     if (avatar.cat) avatar.cat.object.visible=useCat;
+    if (avatar.frog) {
+      if (useFrog && (!avatar.frog.object.visible || changedPeer)) avatar.frog.resetSeat();
+      avatar.frog.object.visible=useFrog;
+      avatar.frog.setActive(useFrog);
+    }
     onChange();
   }
 
@@ -75,6 +87,19 @@ export function createSharedSeating(parent, onChange=()=>{}) {
     }).finally(()=>{avatar.loading=null;});
   }
 
+  function loadFrog(avatar) {
+    if (avatar.frog || avatar.frogLoading) return;
+    avatar.frogLoading=createFrogStudent().then(next=>{
+      next.object.rotation.y=Math.PI;
+      next.object.visible=false;
+      avatar.frog=next;
+      avatar.anchor.add(next.object);
+      updateAppearance(avatar);
+    }).catch(()=>{
+      // The participant's simple figure stays in place on load failure.
+    }).finally(()=>{avatar.frogLoading=null;});
+  }
+
   return {
     show(localSeat,peers) {
       for (const avatar of avatars) {
@@ -82,14 +107,16 @@ export function createSharedSeating(parent, onChange=()=>{}) {
           ? peers.find(person=>(person.seat || person.role)===avatar.seatId)
           : null;
         const peerId=peer?.peerId ?? null;
-        const appearance=peer?.avatar==='orange-cat'?'orange-cat':'simple';
-        if (avatar.peerId!==peerId || avatar.appearance!==appearance) {
+        const appearance=peer?.avatar==='orange-cat'||peer?.avatar==='frog-girl'?peer.avatar:'simple';
+        const changedPeer=avatar.peerId!==peerId;
+        if (changedPeer || avatar.appearance!==appearance) {
           avatar.peerId=peerId;
           avatar.appearance=appearance;
           avatar.headYaw=0;
           avatar.headPitch=0;
-          updateAppearance(avatar);
+          updateAppearance(avatar,changedPeer);
           if (appearance==='orange-cat') loadCat(avatar);
+          if (appearance==='frog-girl') loadFrog(avatar);
         }
         avatar.targetYaw=Number.isFinite(peer?.headYaw)?peer.headYaw:null;
         avatar.targetPitch=Number.isFinite(peer?.headPitch)?peer.headPitch:null;
@@ -99,8 +126,12 @@ export function createSharedSeating(parent, onChange=()=>{}) {
     update(time,elapsed,reduced=false) {
       if (!group.visible) return;
       for (const avatar of avatars) {
-        const {anchor,cat,figure,targetYaw,targetPitch,phase}=avatar;
+        const {anchor,cat,figure,frog,targetYaw,targetPitch,phase}=avatar;
         if (!anchor.visible) continue;
+        if (frog?.object.visible) {
+          frog.update(time,{reducedMotion:reduced});
+          continue;
+        }
         const tracking=targetYaw!==null && targetPitch!==null;
         avatar.headYaw=THREE.MathUtils.damp(avatar.headYaw,targetYaw ?? 0,12,elapsed);
         avatar.headPitch=THREE.MathUtils.damp(avatar.headPitch,targetPitch ?? 0,12,elapsed);

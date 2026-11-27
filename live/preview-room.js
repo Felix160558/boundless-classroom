@@ -16,7 +16,7 @@ const operations = ['stroke','clear','erase','chemistry'];
 export function avatarState(data) {
   if (!data || typeof data !== 'object' || Array.isArray(data) ||
       !Object.keys(data).every(key => ['avatar', 'headYaw', 'headPitch'].includes(key)) ||
-      !['simple', 'orange-cat'].includes(data.avatar)) return null;
+      !['simple', 'orange-cat', 'frog-girl'].includes(data.avatar)) return null;
   const {avatar, headYaw = null, headPitch = null} = data;
   if (headYaw === null && headPitch === null) return {avatar, headYaw, headPitch};
   if (!Number.isFinite(headYaw) || !Number.isFinite(headPitch)) return null;

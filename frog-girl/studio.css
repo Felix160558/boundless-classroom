@@ -1,0 +1,43 @@
+:root{color-scheme:light;--ink:#273e37;--soft:#576c63;--rule:rgba(48,75,60,.20);font-family:"PingFang SC","Hiragino Sans GB","Microsoft Yahei",sans-serif;color:var(--ink)}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:#e8eee9}
+main{height:100vh;height:100dvh;min-height:310px;display:grid;grid-template-rows:auto minmax(0,1fr) auto;overflow:hidden;background:radial-gradient(ellipse at 64% 31%,#f3f4e9 0%,rgba(242,245,235,.84) 19%,transparent 60%),linear-gradient(151deg,#dce9e6,#e7ede6 43%,#e0e8df 78%,#d0dfd8)}
+main.classroom-view{--ink:#f2f3ed;--soft:#bbcad3;--rule:rgba(187,202,211,.24);color:var(--ink);background:#090e16;color-scheme:dark}
+main.classroom-view .actions button:hover,main.classroom-view .views button:hover{color:var(--ink)}
+#toggle-classroom[aria-pressed="true"]{border-bottom:1px solid var(--rule);color:var(--ink)}
+header,footer{display:flex;align-items:center;margin-inline:clamp(18px,4.3vw,88px)}
+header{justify-content:space-between;padding-top:max(18px,env(safe-area-inset-top));padding-bottom:11px}
+h1{margin:0;font-family:"Songti SC","STSong",Georgia,serif;font-weight:550;letter-spacing:.09em;font-size:clamp(23px,2.3vw,36px);line-height:1.35}
+button{background:none;color:inherit;font:inherit;cursor:pointer;border:0;touch-action:manipulation}
+button:focus-visible,input:focus-visible,canvas:focus-visible{outline:2px solid #477465;outline-offset:3px}
+.actions{display:flex;align-items:center;gap:12px}
+.actions button{font-size:13px;color:var(--soft);padding:9px 3px}
+.actions button:hover,.actions [aria-expanded="true"],.views button:hover{color:#112d23}
+#finish-error{font-size:12px;color:var(--soft)}
+@media(max-width:440px){.actions{gap:6px}}
+@media(max-width:520px){header{flex-wrap:wrap;gap:5px 12px}}
+.actions [aria-expanded="true"]{box-shadow:inset 0 -1px currentColor}
+.observation{min-height:0;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
+.observation.with-reference{grid-template-columns:minmax(0,1fr) minmax(200px,min(40vw,780px))}
+#reference{min-height:0;min-width:0;margin:0;align-self:stretch;padding:10px clamp(18px,4.3vw,88px) 10px 0}
+#reference img{display:block;width:100%;height:100%;object-fit:contain;object-position:center}
+#stage{position:relative;min-width:0;min-height:0}
+#portrait{display:block;width:100%;height:100%;touch-action:none;cursor:grab;outline-offset:-5px}
+#portrait:active{cursor:grabbing}
+#status{position:absolute;top:49%;left:50%;transform:translate(-50%,-50%);color:var(--soft);font-size:14px;margin:0;text-align:center}
+#status a{display:inline-block;margin-bottom:8px;color:var(--ink);text-underline-offset:3px}
+footer{align-self:end;display:flex;gap:clamp(18px,4vw,76px);border-top:1px solid var(--rule);padding:14px 0 max(16px,env(safe-area-inset-bottom));font-size:13px}
+.views{display:inline-flex;gap:3px;padding:3px;border:1px solid var(--rule);border-radius:30px}
+.views button{padding:6px 16px;border-radius:22px;white-space:nowrap;color:var(--soft)}
+.views [aria-pressed="true"]{background:#325044;color:#fff}
+.views [aria-pressed="true"]:hover{color:#fff}
+.light{display:flex;align-items:center;gap:14px}
+.light label{white-space:nowrap;font-weight:550}
+.light input{width:clamp(105px,13vw,220px);accent-color:#436e59;cursor:pointer;height:22px;margin:0;background:transparent}
+.light output{width:3.4em;color:var(--soft);white-space:nowrap}
+.light #light-sweep{color:var(--ink);border-bottom:1px solid var(--rule);font-size:12px;min-width:2.5em;padding:4px 0;white-space:nowrap}
+.hint{margin:0 0 0 auto;color:var(--soft);font-size:12px;letter-spacing:.023em}.hint span{margin-inline:5px}
+@media(max-width:680px){header{padding-top:max(14px,env(safe-area-inset-top))}.hint{display:none}footer{justify-content:space-between;gap:12px}.light{gap:8px}.views button{padding:6px 12px}.light input{width:clamp(76px,21vw,145px)}}
+@media(max-height:460px){header{padding-top:5px;padding-bottom:0}footer{padding:4px 0}h1{font-size:20px}}
+@media(max-width:680px) and (orientation:portrait){.observation.with-reference{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) clamp(76px,19dvh,160px)}#reference{padding:3px 18px 8px}}

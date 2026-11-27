@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#e8eee9">
+<title>跳跳蛙女孩</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="./studio.css">
+</head>
+<body>
+<main>
+  <header>
+    <h1>跳跳蛙女孩</h1>
+    <div class="actions">
+      <span id="finish-error" role="status" hidden></span>
+      <button id="toggle-seat" type="button" hidden>坐下</button>
+      <button id="toggle-classroom" type="button" aria-pressed="false" hidden>教室</button>
+      <button id="reset" type="button">复位</button>
+    </div>
+  </header>
+  <div class="observation">
+    <section id="stage" aria-label="可环绕观察的三维角色">
+      <canvas id="portrait" tabindex="0" aria-label="拖动环绕，滚轮或双指缩放。键盘可用方向键和加减键。"></canvas>
+      <p id="status" role="status">正在准备模型…</p>
+    </section>
+  </div>
+  <footer aria-label="观察设置">
+    <div class="views" role="group" aria-label="构图"><button type="button" aria-pressed="true" id="bust">半身</button><button type="button" aria-pressed="false" id="eyes">眼神</button></div>
+    <div class="light"><label for="light">光向</label><input type="range" min="-160" max="160" step=".5" value="-35" id="light"><output for="light" id="light-label">侧前光</output><button id="light-sweep" type="button" aria-label="播放侧前光到叶后逆光的镜头" title="播放移灯镜头" hidden>移灯</button></div>
+    <p class="hint">拖动环绕<span> · </span>双指或滚轮缩放</p>
+  </footer>
+</main>
+<script type="module">
+const status=document.querySelector('#status');
+try{
+  const {openStudio}=await import('./studio.js?v=frog-peer-74');
+  await openStudio();
+  status.hidden=true;
+}catch(error){
+  console.error(error);
+  status.hidden=false;
+  status.textContent=error.userMessage||'三维预览未能启动。请确认浏览器已启用 WebGL，然后刷新。';
+}
+</script>
+</body>
+</html>

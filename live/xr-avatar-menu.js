@@ -13,12 +13,13 @@ export function createXRAvatarMenu(scene,rig,referenceSpace,selected,onSelect, {
   const position=new THREE.Vector3(), direction=new THREE.Vector3();
   const quaternion=new THREE.Quaternion();
   const labels=language==='zh'
-    ? {menu:'形象',simple:'方块人',orange:'橘猫学生',unlock:'解锁橘猫'}
-    : {menu:'Avatar',simple:'Block Figure',orange:'Orange Cat',unlock:'Unlock Orange Cat'};
+    ? {menu:'形象',simple:'方块人',orange:'橘猫学生',unlock:'解锁橘猫',frog:'跳跳蛙女孩'}
+    : {menu:'Avatar',simple:'Block Figure',orange:'Orange Cat',unlock:'Unlock Orange Cat',frog:'Frog Girl'};
   const rows=[
     {name:labels.menu,id:null,y:0},
     {name:labels.simple,id:'simple',y:-.103},
     {name:labels.orange,id:'orange-cat',y:-.206},
+    {name:labels.frog,id:'frog-girl',y:-.309},
   ].map(row=>{
     const canvas=document.createElement('canvas');
     canvas.width=384; canvas.height=98;
@@ -60,6 +61,11 @@ export function createXRAvatarMenu(scene,rig,referenceSpace,selected,onSelect, {
     }
   }
 
+  function hitTest(ray) {
+    if(!group.visible)return null;
+    return ray.intersectObjects(open?targets:trigger,false)[0]?.object ?? null;
+  }
+
   function hit(frame,source,space) {
     if (!space || !source?.targetRaySpace) return null;
     const pose=frame.getPose(source.targetRaySpace,space);
@@ -69,7 +75,7 @@ export function createXRAvatarMenu(scene,rig,referenceSpace,selected,onSelect, {
     quaternion.set(q.x,q.y,q.z,q.w);
     direction.set(0,0,-1).applyQuaternion(quaternion).transformDirection(rig.matrixWorld);
     raycaster.set(position,direction);
-    return raycaster.intersectObjects(open?targets:trigger,false)[0]?.object ?? null;
+    return hitTest(raycaster);
   }
 
   function select(event) {
@@ -84,6 +90,7 @@ export function createXRAvatarMenu(scene,rig,referenceSpace,selected,onSelect, {
   }
 
   return {
+    hitTest,
     attach(next,view) {
       session?.removeEventListener('select',select);
       session=next;

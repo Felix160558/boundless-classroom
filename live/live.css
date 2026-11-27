@@ -46,11 +46,11 @@ a { color: inherit; text-decoration: none; }
 .room-header button { font-size: 12px; padding: 9px 5px; white-space: nowrap; }
 #room-title { font-variant-numeric: tabular-nums; letter-spacing: .14em; color: #e3d1ad; }
 
-#avatar-preview, #station-vr, #leave {
+#station-vr, #leave {
   white-space: nowrap; padding: 9px 12px; border: 1px solid #d4deeb32; border-radius: 5px;
   background: #10182052; color: #eeeae2; font-size: 11px;
 }
-#avatar-preview:hover, #station-vr:hover, #station-vr[aria-pressed="true"], #leave:hover {
+#station-vr:hover, #station-vr[aria-pressed="true"], #leave:hover {
   border-color: #c0ccdb71; background: #242d3a96;
 }
 .avatar-menu { position: relative; }
@@ -118,8 +118,6 @@ a { color: inherit; text-decoration: none; }
 body[data-station="lounge"] .topbar { background: linear-gradient(#130e09b0,transparent); }
 body[data-station="lounge"] .brand { color: #e7dbc7; }
 body[data-station="lounge"] .preview-label { color: #c6b696; font-size: 9px; letter-spacing: .22em; }
-body[data-station="classroom"] #avatar-preview { display: none; }
-body[data-station="lounge"] #avatar-preview,
 body[data-station="lounge"] #station-vr,
 body[data-station="lounge"] #leave { background: #32291c26; border-color: #e0c69930; color: #e4d5bd; }
 #center-station { color: #d7cebc; padding: 8px; font-size: 11px; white-space: nowrap; }
@@ -305,7 +303,7 @@ dialog h2 { font-size: 28px; margin: 3px 0 22px; }
   .room-header button { padding-block: 3px; }
   body[data-station="classroom"] .brand > span:last-child { display: none; }
   .lounge-actions button { padding-inline: 13px; }
-  #avatar-preview, #station-vr, #leave { font-size: 10px; padding-inline: 8px; }
+  #station-vr, #leave { font-size: 10px; padding-inline: 8px; }
   .workspace {
     --board-width: calc(100% - 32px); --board-height: calc((100vw - 32px) * .475);
     min-height: 0; grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -387,7 +385,7 @@ body[data-station-rendered="true"] .workspace.is-looking { cursor: grabbing; }
 #teacher-biography { min-height: 210px; }
 @media (max-width: 410px) {
   #center-station { font-size: 9px; padding: 5px; }
-  #avatar-preview, #station-vr, #leave, .avatar-menu summary { font-size: 9px; padding: 8px 6px; }
+  #station-vr, #leave, .avatar-menu summary { font-size: 9px; padding: 8px 6px; }
   .topbar { gap: 6px; padding-inline: 12px; }
   .teacher-profile { padding: 42px 18px; }
   .teacher-image { min-height: 290px; }

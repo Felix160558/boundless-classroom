@@ -5,7 +5,7 @@ import {createClassroomChair} from './classroom-chair.js?v=student-avatar-49';
 
 export const BOARD_DEPTH = 4.8;
 
-export function createStationCabin(scene, {board, localVideo, remoteVideo, projectedVideo, projection, workspace}) {
+export function createStationCabin(scene, {board, localVideo, remoteVideo, projectedVideo, projection, workspace, displayOnly=false}) {
   const group = new THREE.Group();
   const structure = new THREE.Group();
   const teaching = new THREE.Group();
@@ -54,7 +54,7 @@ export function createStationCabin(scene, {board, localVideo, remoteVideo, proje
   key.shadow.normalBias=.035; key.shadow.bias=-.0002;
   const fill = new THREE.DirectionalLight(0x758fae,1.2);
   const lamp = new THREE.PointLight(0xfff3db,23,16,2);
-  group.add(ambient,key,key.target,fill,fill.target,lamp);
+  if(!displayOnly)group.add(ambient,key,key.target,fill,fill.target,lamp);
 
   const ink = new THREE.CanvasTexture(board);
   ink.colorSpace = THREE.SRGBColorSpace;
@@ -254,7 +254,7 @@ export function createStationCabin(scene, {board, localVideo, remoteVideo, proje
     pane(halfWidth*2,length,roomX,top,midZ,Math.PI/2);
     for(const z of [frontZ,rearZ])box(structure,frameMaterial,roomX,top+.01,z,halfWidth*2+.05,.055,.055);
     box(structure,materials.glow,roomX,top-.05,frontZ+.04,halfWidth*2-1,.028,.038);
-    addFurniture(baseY,Boolean(sharedBoard));
+    if(!displayOnly)addFurniture(baseY,Boolean(sharedBoard));
 
     key.position.set(roomX-3,baseY+9,midZ+5);
     key.target.position.set(roomX,baseY,midZ);

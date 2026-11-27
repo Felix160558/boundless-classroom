@@ -2,9 +2,9 @@ import * as THREE from './three.module.min.js';
 import {createCatTeacher} from './cat-teacher.js?v=teacher-face-53';
 import {createMoleculeStage} from './molecule-lesson.js?v=quiet-shape-31';
 import {createSpaceSky} from './space-sky.js?v=medieval-lounge-40';
-import {createLocalStudentBody} from './live/student-vr-body.js?v=block-vr-56';
-import {createXRAvatarMenu} from './live/xr-avatar-menu.js?v=block-vr-56';
-import {avatarPreference} from './live/avatar-preference.js?v=block-vr-56';
+import {createLocalStudentBody} from './live/student-vr-body.js?v=frog-peer-74';
+import {createXRAvatarMenu} from './live/xr-avatar-menu.js?v=frog-seat-61';
+import {avatarPreference} from './live/avatar-preference.js?v=frog-seat-61';
 
 const TAU = Math.PI * 2;
 

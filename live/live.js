@@ -5,9 +5,9 @@ import {createRoomCast} from './room-cast.js?v=station-room-38';
 import {createRoomPointer} from './room-pointer.js?v=station-room-38';
 import {mountAppointment} from './appointment.js?v=medieval-lounge-40';
 import {mountRoomInvitation, roomCodeFromURL, roomServiceOrigin} from './room-invitation.js?v=trio-online-54';
-import {stationView} from './room-sky.js?v=block-vr-56';
-import {createPreviewRoom, isPagesPreview, PREVIEW_NOTICE} from './preview-room.js?v=trio-online-54';
-import {avatarPreference} from './avatar-preference.js?v=block-vr-56';
+import {stationView} from './room-sky.js?v=frog-peer-74';
+import {createPreviewRoom, isPagesPreview, PREVIEW_NOTICE} from './preview-room.js?v=frog-seat-61';
+import {avatarPreference} from './avatar-preference.js?v=frog-seat-61';
 
 import {lookupBoardMolecule, recognizeBoardMolecule, selectCircledInk, strokesAtEraser} from './board-chemistry.js?v=ink-chemboard-42';
 
@@ -350,8 +350,8 @@ function syncAvatar() {
   if (!soloPreview && session) void sendAvatar({avatar:activeAvatar,...trackedHead});
 }
 function renderAvatarChoice() {
-  avatarMenu.hidden=!session;
-  if (avatarMenu.hidden) avatarMenu.open=false;
+  avatarMenu.hidden=false;
+  $('look-in-mirror').hidden=Boolean(session);
   workspace.dataset.avatar=activeAvatar;
   if (session) workspace.dispatchEvent(new Event('room-local-avatar'));
   for (const button of avatarButtons) {
@@ -370,11 +370,12 @@ avatarPreference.subscribe(()=>{
 });
 for (const button of avatarButtons) {
   button.addEventListener('click',()=>{
-    if (session) avatarPreference.select(button.dataset.avatar);
+    avatarPreference.select(button.dataset.avatar);
     avatarMenu.open=false;
     avatarMenu.querySelector('summary').focus();
   });
 }
+renderAvatarChoice();
 document.addEventListener('pointerdown',event=>{
   if (avatarMenu.open && !avatarMenu.contains(event.target)) avatarMenu.open=false;
 });
@@ -926,6 +927,7 @@ async function leave(note='',unloading=false) {
   board.reset(0,[]); cancelInkSelection(); updateChemistry([]); setEraser(false); inkNoteUntil=0; $('room').hidden=true; $('lobby').hidden=false;
   document.body.dataset.station='lounge';
   document.title='The Common Room · Boundless Classroom';
+  renderAvatarChoice();
   $('room-header').hidden=true; $('preview-label').hidden=false; $('tools').open=false;
   setJoinBusy(true); $('clear').disabled=false;
   joinStatus(previous?'Leaving the classroom…':note); updateMediaButtons();

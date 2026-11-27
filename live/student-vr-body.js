@@ -1,7 +1,8 @@
 import * as THREE from '../three.module.min.js';
-import {SEATED_STUDENT_HEIGHT} from './shared-seating.js?v=block-vr-56';
+import {SEATED_STUDENT_HEIGHT} from './shared-seating.js?v=frog-hair-73';
 import {createXRStudentHands} from './xr-student-hands.js?v=local-vr-cat-55';
 import {createBlockStudent} from './block-student.js?v=block-vr-56';
+import {frogStudentEye} from './frog-student.js?v=frog-hair-73';
 
 function wristTarget() {
   return {position:new THREE.Vector3(), quaternion:new THREE.Quaternion(), strength:0};
@@ -23,13 +24,17 @@ export function createLocalStudentBody(parent, {
   const inverseAnchor=new THREE.Matrix4(), inverseRotation=new THREE.Quaternion();
   const left=wristTarget(), right=wristTarget();
   const pose={leftHand:null,rightHand:null};
+  const frogEye=frogStudentEye();
   let avatar=block, choice='simple', orangeCat=null, loading=null, tracked=false;
 
   function showAppearance() {
-    const next=choice==='orange-cat' && orangeCat ? orangeCat : block;
+    // Frog Girl is rendered by the shared seating on the other participants' screens.
+    const next=choice==='frog-girl' ? null
+      : choice==='orange-cat' ? orangeCat??block : block;
     if (avatar===next) return;
-    avatar.object.visible=false;
-    next.object.visible=true;
+    if (!avatar || !next) resetInput();
+    if (avatar) avatar.object.visible=false;
+    if (next) next.object.visible=true;
     avatar=next;
     if (anchor.visible) onChange();
   }
@@ -64,7 +69,7 @@ export function createLocalStudentBody(parent, {
 
   function setSeat({x,y,z,yaw}) {
     anchor.position.set(x,y,z);
-    // The cat faces +Z in its asset, while chairs face -Z at yaw zero.
+    // Avatars face +Z at rest, while chairs face -Z at yaw zero.
     anchor.rotation.y=yaw+Math.PI;
   }
 
@@ -79,8 +84,8 @@ export function createLocalStudentBody(parent, {
   }
 
   function eyePosition(out) {
-    // Both representations register their eye and body coordinates to the chair.
-    return anchor.localToWorld(out.copy(avatar.eyePosition));
+    // Each representation registers its eye and body coordinates to the chair.
+    return anchor.localToWorld(out.copy(avatar?.eyePosition??frogEye));
   }
 
   function toLocal(target, hand) {
@@ -92,7 +97,7 @@ export function createLocalStudentBody(parent, {
   }
 
   function update(time, {frame,referenceSpace,rig,dt} = {}) {
-    if (!anchor.visible) return;
+    if (!anchor.visible || !avatar) return;
     if (tracked) {
       const wrists=hands.update(frame,referenceSpace,rig,dt);
       anchor.updateWorldMatrix(true,false);

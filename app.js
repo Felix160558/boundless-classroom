@@ -5,7 +5,7 @@ import {teacher} from './teacher-client.js?v=quiet-input-33';
 import {createTeacherVoice} from './teacher-voice.js?v=quiet-shape-31';
 import {renderTeacherReply,lessonNotes} from './teacher-content.js?v=gentle-board-13';
 import {createAttachments,appendAttachmentImages} from './attachments.js?v=quiet-input-33';
-import {avatarPreference} from './live/avatar-preference.js?v=block-vr-56';
+import {avatarPreference} from './live/avatar-preference.js?v=frog-seat-61';
 
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 let space=null,topic='free',pending=false,voice=false,currentMode='home',xrSupported=false;
@@ -466,7 +466,7 @@ function fallback(message){
 const sceneStartupTimer=setTimeout(()=>{
   if(!space)fallback('三维教室资源载入较慢，可刷新重试。仍可使用文字课堂和真人教室。');
 },45000);
-import('./space-scene.js?v=block-vr-56').then(async({createSpace})=>{
+import('./space-scene.js?v=frog-peer-74').then(async({createSpace})=>{
   clearTimeout(sceneStartupTimer);
   space=createSpace($('#universe'),(state,detail)=>{
     if(state==='ready'){

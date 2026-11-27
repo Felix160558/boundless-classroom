@@ -1,14 +1,16 @@
 import * as THREE from '../three.module.min.js';
 import {createSpaceSky} from '../space-sky.js?v=medieval-lounge-40';
-import {BOARD_DEPTH, createStationCabin} from './station-cabin.js?v=trio-classroom-50';
+import {BOARD_DEPTH, createStationCabin} from './station-cabin.js?v=frog-peer-74';
 import {createCastleLounge} from './castle-lounge.js?v=star-window-41';
+import {createLoungeMirror} from './lounge-mirror.js?v=frog-peer-74';
+import {createLoungeMirrorAvatar} from './lounge-mirror-avatar.js?v=frog-peer-74';
 
 import {createPreviewMolecules} from './preview-molecules.js?v=shared-classroom-43';
 import {createSharedSeating, seatPose, seatedView, SHARED_BOARD, SHARED_FLOOR, FURNITURE_INSET,
-  SEATED_STUDENT_HEIGHT} from './shared-seating.js?v=block-vr-56';
-import {createLocalStudentBody} from './student-vr-body.js?v=block-vr-56';
-import {createXRAvatarMenu} from './xr-avatar-menu.js?v=block-vr-56';
-import {avatarPreference} from './avatar-preference.js?v=block-vr-56';
+  SEATED_STUDENT_HEIGHT} from './shared-seating.js?v=frog-hair-73';
+import {createLocalStudentBody} from './student-vr-body.js?v=frog-peer-74';
+import {createXRAvatarMenu} from './xr-avatar-menu.js?v=frog-seat-61';
+import {avatarPreference} from './avatar-preference.js?v=frog-seat-61';
 
 export const stationView = {
   ready:false,
@@ -25,6 +27,7 @@ const container = get('room-sky');
 const vrButton = get('station-vr');
 const status = get('station-vr-status');
 const centerButton = get('center-station');
+const mirrorButton = get('look-in-mirror');
 const profileDialog = get('teacher-dialog');
 const gallery = get('portrait-gallery');
 const profileButtons = [...gallery.querySelectorAll('[data-teacher]')];
@@ -94,18 +97,29 @@ function startStation() {
   const headQuaternion=new THREE.Quaternion();
   const seatedEye=new THREE.Vector3();
   const eyeShift=new THREE.Vector3();
+  const mirrorCenter=new THREE.Vector3(),mirrorViewer=new THREE.Vector3(),mirrorDirection=new THREE.Vector3();
   let preview=false, xrSession=null, xrSupported=false, opening=false, ownFullscreen=false;
   let yaw=0,pitch=0,drag=null,lastFrame=null,needsFrame=true,layoutRequest=null,xrAlign=false;
+  let mirrorFocused=false;
   let xrEyeAnchor=null, xrReferenceSpace=null;
   let lastHead=null,lastHeadAt=-Infinity;
   const xrUp=new THREE.Vector3(0,1,0);
   lounge.group.userData.requestRender=()=>{needsFrame=true;};
   const inClassroom=()=>document.body.dataset.station==='classroom';
+  const usesAvatarView=()=>inClassroom()&&(preview||avatarPreference.current==='frog-girl');
+  const mirror=createLoungeMirror(lounge.group,scene);
+  const reflection=createLoungeMirrorAvatar(lounge.group,()=>{needsFrame=true;});
+  reflection.setAppearance(avatarPreference.current);
+  avatarPreference.subscribe(avatar=>{
+    reflection.setAppearance(avatar);
+    needsFrame=true;
+  });
   const localBody=createLocalStudentBody(cabin.group,{
     height:SEATED_STUDENT_HEIGHT,
     onChange:refreshAvatarView,
     onError:(_error,phase)=>{
-      if (preview&&inClassroom()) status.textContent=phase==='detail'
+      if (!usesAvatarView()) return;
+      status.textContent=phase==='detail'
         ? 'Orange Cat is ready. Fur detail could not load.'
         : 'Orange Cat could not load. Block Figure is ready.';
     },
@@ -126,7 +140,7 @@ function startStation() {
   function syncLocalBody() {
     const seat=localSeat();
     if (seat) localBody.setSeat(seat);
-    localBody.setVisible(Boolean(seat&&preview),{tracked:Boolean(xrSession)});
+    localBody.setVisible(Boolean(seat&&usesAvatarView()),{tracked:Boolean(xrSession)});
   }
 
   function prepareAvatar() {
@@ -212,6 +226,7 @@ function startStation() {
     galaxy.visible=true;
     lounge.group.visible=!classroom;
     cabin.group.visible=classroom;
+    reflection.setActive(!classroom);
     sky.resize(height,renderer.getPixelRatio());
     cabin.layout(camera,width,height,classroom?board.getBoundingClientRect():null,classroom,roomRole?SHARED_BOARD:null);
     const surface=cabin.boardSurface();
@@ -229,7 +244,7 @@ function startStation() {
   const viewerSeat = () => {
     const seat=inClassroom()?roomSeat:null;
     const view=seatedView(seat,workspace.dataset.avatar);
-    if (preview&&localSeat()) view.position=localBody.eyePosition(seatedEye).toArray();
+    if (usesAvatarView()&&localSeat()) view.position=localBody.eyePosition(seatedEye).toArray();
     if (seat==='student-2') {
       const [x,,z]=view.position;
       const boardYaw=Math.atan2(x-SHARED_BOARD.x,BOARD_DEPTH+z);
@@ -242,14 +257,35 @@ function startStation() {
     const seated=inClassroom() && (roomSeat || preview);
     const view=viewerSeat();
     if (xrSession) camera.position.set(0,0,0);
-    else camera.position.fromArray(view.position);
+    else {
+      camera.position.fromArray(view.position);
+      if (mirrorFocused&&!inClassroom()) {
+        mirror.glass.getWorldPosition(mirrorCenter);
+        camera.position.set(mirrorCenter.x-2.75,-.13,mirrorCenter.z);
+      }
+      if (inClassroom() && roomSeat==='student-2' && avatarPreference.current==='frog-girl') {
+        // The side chair is next to the desk. A small lean into the aisle
+        // lets the browser's look-down control emulate moving the head past it.
+        const lean=THREE.MathUtils.smootherstep(-pitch,.92,1.20)
+          *THREE.MathUtils.smoothstep(Math.cos(yaw),.45,.85);
+        camera.position.x+=.06*lean;
+        camera.position.y-=.0132*lean;
+      }
+    }
     camera.rotation.set(xrSession?0:pitch-(seated ? .06 : 0),xrSession?0:view.yaw+yaw,0,'YXZ');
     camera.updateMatrixWorld(true);
-    centerButton.hidden=Math.abs(yaw)+Math.abs(pitch)<.005;
+    centerButton.hidden=!mirrorFocused&&Math.abs(yaw)+Math.abs(pitch)<.005;
     positionPortraitButtons();
     needsFrame=true;
   }
-  centerButton.addEventListener('click',()=>{yaw=0;pitch=0;pose();});
+  function centerView(){mirrorFocused=false;yaw=0;pitch=0;pose();}
+  centerButton.addEventListener('click',centerView);
+  mirrorButton.addEventListener('click',()=>{
+    if(inClassroom()||xrSession)return;
+    mirrorButton.closest('details').open=false;
+    mirrorFocused=true;yaw=-Math.PI/2;pitch=-.14;pose();
+    centerButton.focus({preventScroll:true});
+  });
 
   function describePreview() {
     status.textContent=preview&&!xrSession
@@ -263,7 +299,7 @@ function startStation() {
     else delete document.body.dataset.stationPreview;
     vrButton.setAttribute('aria-pressed',String(value));
     vrButton.textContent=value?(inClassroom()?'Back to Classroom':'Back to Lounge'):'Enter VR';
-    yaw=0;pitch=0;drag=null;
+    mirrorFocused=false;yaw=0;pitch=0;drag=null;
     for (const surface of [container,workspace,lobby]) surface.classList.remove('is-looking');
     describePreview();
     if (inClassroom()) workspace.dispatchEvent(new CustomEvent('room-vr-mode',{detail:value}));
@@ -377,6 +413,7 @@ function startStation() {
   bindLook(container,true);
   document.addEventListener('keydown',event=>{
     if (xrSession||event.defaultPrevented||document.querySelector('dialog[open]')) return;
+    if (event.key==='Escape'&&mirrorFocused) {centerView();return;}
     if (event.key==='Escape'&&preview) {exitPreview();return;}
     if (event.target.closest?.('input,select,textarea,[contenteditable]')) return;
     const directions={ArrowLeft:[.065,0],ArrowRight:[-.065,0],ArrowUp:[0,.065],ArrowDown:[0,-.065]};
@@ -411,6 +448,7 @@ function startStation() {
   workspace.addEventListener('room-local-avatar',()=>{
     describePreview();
     prepareAvatar();
+    syncLocalBody();
     lastHead=null;
     if (!xrSession) pose();
   });
@@ -418,7 +456,9 @@ function startStation() {
     if (xrSession) void xrSession.end().catch(()=>{});
     if (preview) exitPreview();
     prepareAvatar();
-    yaw=0;pitch=0;pose();scheduleLayout();
+    syncLocalBody();
+    reflection.setActive(!inClassroom());
+    centerView();scheduleLayout();
   }).observe(document.body,{attributes:true,attributeFilter:['data-station']});
   const observer=new ResizeObserver(scheduleLayout);
   observer.observe(container);observer.observe(board);
@@ -461,7 +501,7 @@ function startStation() {
     sky.update(reduce.matches?0:elapsed);
     if (inClassroom()) {
       cabin.update(time,elapsed,preview);
-      if (preview) localBody.update(time/1000,{
+      if (usesAvatarView()) localBody.update(time/1000,{
         frame:refSpace&&!xrAlign?xrFrame:null,
         referenceSpace:refSpace,
         rig,
@@ -489,7 +529,22 @@ function startStation() {
       }
       seating.update(time/1000,elapsed,reduce.matches);
       chemistry.update(time/1000,elapsed);
-    } else lounge.update(time,elapsed,reduce.matches);
+    } else {
+      lounge.update(time,elapsed,reduce.matches);
+      const viewer=refSpace&&xrFrame.getViewerPose(refSpace);
+      if(viewer){
+        const {position,orientation}=viewer.transform;
+        mirrorViewer.set(position.x,position.y,position.z).applyMatrix4(rig.matrixWorld);
+        headQuaternion.set(orientation.x,orientation.y,orientation.z,orientation.w);
+        mirrorDirection.set(0,0,-1).applyQuaternion(headQuaternion).transformDirection(rig.matrixWorld);
+      }else{
+        camera.getWorldPosition(mirrorViewer);
+        camera.getWorldDirection(mirrorDirection);
+      }
+      lounge.group.worldToLocal(mirrorViewer);
+      const lookYaw=Math.atan2(-mirrorDirection.x,-mirrorDirection.z);
+      reflection.update(time/1000,{localViewer:mirrorViewer,lookYaw,reducedMotion:reduce.matches});
+    }
     renderer.render(scene,camera);
   });
 }
